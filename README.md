@@ -10,4 +10,4 @@ Download the repo then run `release/clipman/clipman.exe`
 ![](https://i.imgur.com/gLrmKk0.png)
 
 # Building from source
-This will fail to build because it's missing my `modules/` folder. but you probably don't have the compiler for this language anyway
+This will fail to build because it's missing my `modules/` folder. but you probably don't have the compiler anyway
