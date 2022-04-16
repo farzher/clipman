@@ -34,7 +34,7 @@ build :: (actually_build := true) {
 
   { // -impor_dir ./modules
     import_path: [..] string;
-    array_add(*import_path, "../modules");
+    array_add(*import_path, "./modules");
     array_add(*import_path, ..options.import_path);
     options.import_path = import_path;
   }
