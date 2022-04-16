@@ -698,7 +698,7 @@ on_copy :: () {
   files := os_clipboard_get_file(hwnd);
   if files.count {
     for f, i: files {
-      files[i] = tprint("% - %", substring(f, last_index(f, "\\")+"\\".count), f);
+      files[i] = tprint("% - %", substring(f, mylastindex(f, #char "\\")+"\\".count), f);
     }
     str := strings_alloc.join(files, "\n", tallocator);
     insert_into_db(str, .FILE);

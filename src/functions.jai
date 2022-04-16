@@ -329,3 +329,15 @@ showinputbox :: (title: *u8, message: *u8) -> *u8 {
   // memory leak?
   return tinyfd_inputBox(title, message, null);
 }
+
+
+
+// last_index wasn't working for some reason...
+mylastindex :: (str: string, char: u8) -> int {
+  i := str.count-1;
+  while i >= 0 {
+    if str[i] == char return i;
+    i -= 1;
+  }
+  return -1;
+}
