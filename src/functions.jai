@@ -217,15 +217,7 @@ show_window :: (_visible := true) {
   ShowWindow(hwnd, xx ifx visible then SW_SHOW else SW_HIDE);
   if !visible then Simp.swap_buffers(hwnd); // ensure streamer mode doesn't render old information
   if visible then  SetForegroundWindow(hwnd); // ensure window has focus
-
-  if visible {
-    if config.streamer_mode_ms {
-      is_streamer_mode = !last_opened_at || getms() > last_opened_at + config.streamer_mode_ms;
-    } else {
-      is_streamer_mode = false;
-    }
-    last_opened_at = getms();
-  }
+  if visible then is_streamer_mode = xx config.streamer_mode;
 }
 
 

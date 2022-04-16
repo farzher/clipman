@@ -11,7 +11,7 @@ config: struct { // overwitten by config_load
   hotkey_mod        : int    = MOD_ALT | MOD_NOREPEAT;
   hotkey_key        : int    = 0xc0/*tilde `*/;
   transparency      : int    = 90;
-  streamer_mode_ms  : int    = 0; // won't render clips unless the app is opened twice within this time window. 0 to disable
+  streamer_mode     : int    = 0; // for privacy. won't render clips unless you take an extra action. 0 to disable
   on_startup_open   : int    = 1;
   on_startup_delete_clips_bigger_than   : int = 10000;
   db_name           : string = "clipman.db";
@@ -84,7 +84,6 @@ scroll_offset: int;
 records: [..] DbRecord;
 total_copy_count: int;
 total_wheel_delta: int;
-last_opened_at: float64;
 
 is_streamer_mode: bool;
 is_db_locked: bool;
@@ -451,7 +450,7 @@ render :: () {
         Simp.draw_prepared_text(my_font, (window_width-text_width)/2, window_height - (my_font.character_height*(2+line_i)), COLORS.TEXT);
       }
     } else if is_streamer_mode {
-      for line, line_i: string.["STREAMER MODE ENABLED", "To view clips: Open twice in quick succession or click anywhere or hit tab"] {
+      for line, line_i: string.["STREAMER MODE ENABLED", "To view clips: Click anywhere or hit tab"] {
         text_width := Simp.prepare_text(my_font, line);
         Simp.draw_prepared_text(my_font, (window_width-text_width)/2, window_height - (my_font.character_height*(2+line_i)), COLORS.TEXT);
       }
