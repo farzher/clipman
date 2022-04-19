@@ -24,9 +24,9 @@ get_mouse_global :: () -> Point {
 
 
 Monitor: struct {;
-  size: Monitor.Rect;
 
-  Rect :: struct {x, y, w, h :s32;}
+  _size: struct {x, y, w, h :s32;};
+  size :: () -> type_of(_size) { ensure_init(); return Monitor._size; }
 
   init :: () {
     info: MONITORINFO = ---;
@@ -34,14 +34,14 @@ Monitor: struct {;
     success := GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), *info);
     if !success  die("failed to get monitor size");
 
-    Monitor.size.x = info.rcMonitor.left;
-    Monitor.size.y = info.rcMonitor.top;
-    Monitor.size.w = info.rcMonitor.right - Monitor.size.x;
-    Monitor.size.h = info.rcMonitor.bottom - Monitor.size.y;
+    Monitor._size.x = info.rcMonitor.left;
+    Monitor._size.y = info.rcMonitor.top;
+    Monitor._size.w = info.rcMonitor.right - Monitor._size.x;
+    Monitor._size.h = info.rcMonitor.bottom - Monitor._size.y;
   }
 
   ensure_init :: () {
-    if Monitor.size.w != 0  return;
+    if Monitor._size.w != 0  return;
     Monitor.init();
   }
 }
@@ -49,16 +49,14 @@ Monitor: struct {;
 
 
 set_window_pos_to_mouse :: (hwnd: HWND) {
-  Monitor.ensure_init();
-
   mouse := get_mouse_global();
 
   x := mouse.x;
-  too_far_left_amount := cast(s32)( x + window_width - Monitor.size.w );
+  too_far_left_amount := cast(s32)( x + window_width - Monitor.size().w );
   if too_far_left_amount > 0 then x -= too_far_left_amount;
 
   y := mouse.y;
-  too_far_down_amount := cast(s32)( y + window_height - Monitor.size.h );
+  too_far_down_amount := cast(s32)( y + window_height - Monitor.size().h );
   if too_far_down_amount > 0 then y -= too_far_down_amount;
 
   SetWindowPos(hwnd, HWND_TOPMOST, x, y, xx window_width, xx window_height, /*SWP_NOZORDER | SWP_NOACTIVATE | */SWP_FRAMECHANGED);
