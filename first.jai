@@ -14,11 +14,7 @@ build :: () {
   options := get_build_options();
   set_build_options_dc(.{do_output=false});
 
-  isrelease :: #run () -> bool {
-    args := get_build_options().compile_time_command_line;
-    for args  if it == "-release"  return true;
-    return false;
-  }();
+  isrelease :: #run get_build_options().optimization_level == .RELEASE;
 
 
   // build for debug or release
