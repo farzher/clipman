@@ -8,27 +8,30 @@
 */
 
 #run build();
-// #run run();
 
-run :: () {
-  build(actually_build=false);
-  add_build_string("#run main();", w);
-}
-
-w: Workspace;
-build :: (actually_build := true) {
-  w = compiler_create_workspace("Target Program");
+build :: () {
+  w := compiler_create_workspace("Target Program");
   options := get_build_options();
+  set_build_options_dc(.{do_output=false});
+
+  isrelease :: #run () -> bool {
+    user, system := compiler_get_command_line_arguments();
+    for system  if it == "-release"  return true;
+    return false;
+  }();
 
 
   // build for debug or release
-  #if 1 { // -x64
+  #if !isrelease { // debug
+    options.output_path = "bin/";
     // options.backend = .X64;
     // options.x64_options.enable_register_allocation = true;
   } else { // -release
+    options.output_path = "release/";
+    options.output_executable_name = "clipman";
     set_optimization_level(*options, 2, 0);
     options.stack_trace = false;
-    // #run disable_runtime_console();
+    #run disable_runtime_console();
   }
 
 
@@ -39,29 +42,14 @@ build :: (actually_build := true) {
     options.import_path = import_path;
   }
 
-  { // rename the exe
-    // options.output_executable_name = "main";
-    options.output_path = "bin/";
-  }
-
+  // done setting options
   set_build_options(options, w);
 
 
 
-  if actually_build then compiler_begin_intercept(w);
+  compiler_begin_intercept(w);
 
   add_build_file(tprint("%/src/main.jai", #filepath), w);
-
-  // // if options.optimization_level == .RELEASE then #run disable_runtime_console();
-  // // todo doesn't work because the #run always runs
-  // #run () {
-  //   options := get_build_options();
-  //   if options.optimization_level == .RELEASE then disable_runtime_console();
-  // };
-
-  set_build_options_dc(.{do_output=false});
-
-  if !actually_build then return;
 
   // waiting for our exe to finish so we can set its icon
   while true {
@@ -74,10 +62,11 @@ build :: (actually_build := true) {
 
   // set exe icon
   exe_path  := tprint("%1%2.exe", options.output_path, options.output_executable_name);
-  icon_path := tprint("%1%2.ico", options.output_path, "tray");
+  icon_path := "bin/tray.ico";
   set_icon_by_filename(exe_path, icon_path);
 
-
+  // delete .pdb if release
+  #if isrelease  file_delete("release/clipman.pdb");
 }
 
 
@@ -87,5 +76,4 @@ build :: (actually_build := true) {
 #import "Basic";
 #import "Compiler";
 #import "Windows_Resources";
-#import "Ico_File";
-String :: #import "String";
+#import "File";
