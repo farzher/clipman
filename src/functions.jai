@@ -4,26 +4,31 @@
 // i don't like the concept of prefixing every name
 
 
-Point :: struct {x: s32; y: s32;}
-get_mouse :: () -> Point {
-  x, y := get_mouse_pointer_position(hwnd, false);
-  pos: Point = ---;
-  pos.x = xx x;
-  pos.y = xx y;
-  return pos;
+Mouse: struct {
+
+  Point :: struct {x: s32; y: s32;}
+
+  pos :: () -> Point {
+    x, y := get_mouse_pointer_position(hwnd, false);
+    pos: Point = ---;
+    pos.x = xx x;
+    pos.y = xx y;
+    return pos;
+  }
+
+  pos_global :: () -> Point {
+    p: POINT = ---;
+    GetCursorPos(*p);
+    pos: Point = ---;
+    pos.x = p.x;
+    pos.y = p.y;
+    return pos;
+  }
 }
-get_mouse_global :: () -> Point {
-  p: POINT = ---;
-  GetCursorPos(*p);
-  pos: Point = ---;
-  pos.x = p.x;
-  pos.y = p.y;
-  return pos;
-}
 
 
 
-Monitor: struct {;
+Monitor: struct {
 
   _size: struct {x, y, w, h :s32;};
   size :: () -> type_of(_size) { ensure_init(); return Monitor._size; }
@@ -48,8 +53,10 @@ Monitor: struct {;
 
 
 
+
+
 set_window_pos_to_mouse :: (hwnd: HWND) {
-  mouse := get_mouse_global();
+  mouse := Mouse.pos_global();
 
   x := mouse.x;
   too_far_left_amount := cast(s32)( x + window_width - Monitor.size().w );
@@ -145,29 +152,39 @@ decompress :: (compressed: string) -> string {
 
 
 
+TextureCache: struct {
+  #import "my_lru_cache";
 
-#import "my_lru_cache";
-MAX_RECORDS :: 100; // a guess at the maximum amount of records that could ever be displayed. if we display more than this bad things could happen
-texture_cache: LRU(int, Simp.Texture, MAX_RECORDS, FREE_PROC=Simp.texture_unload);
-get_texture_for_record :: (record: DbRecord) -> *Simp.Texture {
-  if record.type != .BITMAP then return null;
+  texture_cache: LRU(int, Simp.Texture, MAX_RECORDS, FREE_PROC=texture_free);
 
-  textureptr := find_pointer(texture_cache, record.id);
-  if textureptr then return textureptr;
+  MAX_RECORDS :: 100; // a guess at the maximum amount of records that could ever be displayed. if we display more than this bad things could happen
 
-  texture: Simp.Texture;
-  bitmap: Simp.Bitmap;
-  bitmapinfobytes := decompress(record.preview);
-  bmpinfo: *BITMAPINFO = xx bitmapinfobytes.data;
-  bitmap.width = bmpinfo.bmiHeader.biWidth;
-  bitmap.height = bmpinfo.bmiHeader.biHeight;
-  bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFO); // is this actually correct?
-  bitmap.stride = 4;
+  // simp's implementation "deinit" doesn't actually free the memory currently, lol.
+  texture_free :: (texture: *Simp.Texture) {
+    #import "GL";
+    glDeleteTextures(1, *texture.gl_handle);
+  }
 
-  success := Simp.texture_load_from_bitmap(*texture, *bitmap);
-  if !success  die("failed to load texture", record.id);
+  get_texture_for_record :: (record: DbRecord) -> *Simp.Texture {
+    if record.type != .BITMAP then return null;
 
-  return add(*texture_cache, record.id, texture);
+    textureptr := find_pointer(TextureCache.texture_cache, record.id);
+    if textureptr then return textureptr;
+
+    texture: Simp.Texture;
+    bitmap: Simp.Bitmap;
+    bitmapinfobytes := decompress(record.preview);
+    bmpinfo: *BITMAPINFO = xx bitmapinfobytes.data;
+    bitmap.width = bmpinfo.bmiHeader.biWidth;
+    bitmap.height = bmpinfo.bmiHeader.biHeight;
+    bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFO); // is this actually correct?
+    bitmap.stride = 4;
+
+    success := Simp.texture_load_from_bitmap(*texture, *bitmap);
+    if !success  die("failed to load texture", record.id);
+
+    return add(*TextureCache.texture_cache, record.id, texture);
+  }
 }
 
 
@@ -310,7 +327,7 @@ popup_menu :: (items: []string) -> string {
     InsertMenuW(hpop, 0, MF_BYPOSITION | MF_STRING, xx (item_i+1), utf8_to_wide(item));
   }
   SetForegroundWindow(hwnd);
-  mouse_global := get_mouse_global();
+  mouse_global := Mouse.pos_global();
   selection : int = xx TrackPopupMenu(hpop, TPM_BOTTOMALIGN | TPM_LEFTALIGN |TPM_RETURNCMD, mouse_global.x, mouse_global.y, 0, hwnd, null);
   if selection == 0 then return "";
   return items[selection-1];

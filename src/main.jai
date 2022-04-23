@@ -50,7 +50,8 @@ main :: () {
   AddClipboardFormatListener(hwnd);
 
   // init Simp rendering stuff
-  Simp.simp_init(hwnd, xx window_width, xx window_height, xx window_width, xx window_height, windowed=true, vsync=true);
+  Simp.set_render_target(hwnd);
+  // Simp.simp_init(hwnd, xx window_width, xx window_height, xx window_width, xx window_height, windowed=true, vsync=true);
 
   // init everything
   init_everything();
@@ -325,7 +326,7 @@ update :: () {
 
 render :: () {
   #if true { // weird hover feature
-    mouse := get_mouse();
+    mouse := Mouse.pos();
     is_mouse_in_window := !(mouse.x < 0 || mouse.x > window_width || mouse.y < 0 || mouse.y > window_height);
     is_mouse_in_right_half := is_mouse_in_window && mouse.x >= window_width/4;
     hover_index: int = ifx is_mouse_in_right_half then mouse.y/config.record_height else -1;
@@ -375,7 +376,7 @@ render :: () {
     render_lines_of_text :: () #expand {
       if record.type == .BITMAP {
 
-        texture := get_texture_for_record(record);
+        texture := TextureCache.get_texture_for_record(record);
 
         ratio := min(cast(float)window_width/texture.width, cast(float)config.record_height/texture.height);
         if hover_index == i then ratio = min(cast(float)window_width/texture.width, cast(float)(window_height - i*config.record_height)/texture.height);
@@ -520,7 +521,7 @@ render :: () {
 
   Simp.swap_buffers(hwnd);
   DwmFlush(); // simp opengl vsync burns 100% cpu without this
-  Simp.update_window(hwnd, xx window_width, xx window_height, xx window_width, xx window_height);
+  Simp.update_window(hwnd);
   Simp.clear_render_target(COLORS.DARK.x, COLORS.DARK.y, COLORS.DARK.z, 0);
   // Simp.clear_render_target(COLORS.BLACKISH.x, COLORS.BLACKISH.y, COLORS.BLACKISH.z, 1);
   // Simp.clear_render_target(0,0,0,0);
@@ -578,7 +579,7 @@ update_records :: () {
 do_click :: () {
   if is_streamer_mode {is_streamer_mode = false; return; }
 
-  mouse := get_mouse();
+  mouse := Mouse.pos();
   new_selected_index := mouse.y/config.record_height;
   if new_selected_index != selected_index {
     selected_index = new_selected_index;
@@ -590,7 +591,7 @@ do_click :: () {
 do_rightclick :: () #expand {
   if is_streamer_mode {is_streamer_mode = false; return; }
 
-  mouse := get_mouse();
+  mouse := Mouse.pos();
 
   selection := popup_menu(.["Delete", "Context"]);
   if selection == {
