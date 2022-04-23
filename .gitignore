@@ -3,3 +3,4 @@
 *.json
 *.pdb
 ignore/
+bin/first.exe
