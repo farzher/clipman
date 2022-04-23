@@ -15,8 +15,8 @@ build :: () {
   set_build_options_dc(.{do_output=false});
 
   isrelease :: #run () -> bool {
-    user, system := compiler_get_command_line_arguments();
-    for system  if it == "-release"  return true;
+    args := get_build_options().compile_time_command_line;
+    for args  if it == "-release"  return true;
     return false;
   }();
 
@@ -24,8 +24,8 @@ build :: () {
   // build for debug or release
   #if !isrelease { // debug
     options.output_path = "bin/";
-    // options.backend = .X64;
-    // options.x64_options.enable_register_allocation = true;
+    options.backend = .X64;
+    options.x64_options.enable_register_allocation = true;
   } else { // -release
     options.output_path = "release/";
     options.output_executable_name = "clipman";
