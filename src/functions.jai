@@ -190,12 +190,13 @@ TextureCache: struct {
 
 
 
-search_input: GetRect.Text_Input;
+search_input: GetRect.Text_Input_State;
 search_string: *string;
 
 GetRect :: #import "GetRect";
 init_search_string :: () {
   search_input.active = true;
+  search_input.text.data = search_input.input_buffer.data;
   search_string = *search_input.text;
 }
 update_search_string :: () {

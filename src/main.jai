@@ -184,7 +184,7 @@ update :: () {
 
     // handle search input
     GetRect.current_time = getms();
-    GetRect.handle_event(*search_input, .{}, <<event);
+    GetRect.handle_event(*search_input, <<event);
 
     if event.type == .KEYBOARD // use .KEYUP and .KEYDOWN events insead of .KEYBOARD
       event.type = ifx event.key_pressed then event.type.KEYDOWN else .KEYUP;
@@ -242,7 +242,7 @@ update :: () {
       case .FOCUS_LOST;
         if ignore_next_blur {ignore_next_blur=false; continue;}
         show_window(false);
-        search_string.count = 0;
+        GetRect.clear_text(*search_input);
 
 
       case .HOTKEY; // when you hit the global hotkey, toggle the window
@@ -609,7 +609,7 @@ do_rightclick :: () #expand {
       scroll_offset = db.select_int("select count(1) from copy where last_seen_at > ?", record.last_seen_at);
       scroll_offset -= max_records/2;
       selected_index = max_records/2;
-      search_string.count = 0;
+      GetRect.clear_text(*search_input);
       update_records(); // to update records.count; so our selected_index works; i think this will cause us to query twice
       `update_records_handeled = true;
   }
@@ -685,7 +685,7 @@ do_submit_selected :: () {
 
 decryptdb :: () {
   init_db(<<search_string);
-  search_string.count = 0;
+  GetRect.clear_text(*search_input);
 }
 
 on_copy :: () {
