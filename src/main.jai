@@ -184,7 +184,8 @@ update :: () {
 
     // handle search input
     GetRect.current_time = getms();
-    GetRect.handle_event(*search_input, <<event);
+    if event.key_code != .ARROW_UP && event.key_code != .ARROW_DOWN // don't handle up/down arrow with getrect. it does some history navigation nonsense...
+      GetRect.handle_event(*search_input, <<event);
 
     if event.type == .KEYBOARD // use .KEYUP and .KEYDOWN events insead of .KEYBOARD
       event.type = ifx event.key_pressed then event.type.KEYDOWN else .KEYUP;
