@@ -1,4 +1,4 @@
-create_window :: (width: int, height: int, window_name: string, window_x := -1, window_y := -1, parent: HWND = null, background_color_rgb := DEFAULT_WINDOW_CREATION_COLOR, style := WINDOWED_STYLE, style_ex :s32= 0) -> HWND {
+create_window :: (width: int, height: int, window_name: string, window_x := -1, window_y := -1, parent: HWND = null, background_color_rgb := DEFAULT_WINDOW_CREATION_COLOR, style := WINDOWED_STYLE, style_ex : s32 = 0) -> HWND {
     if !window_class_initted {
         init_window_class(background_color_rgb);
     }
@@ -19,7 +19,6 @@ create_window :: (width: int, height: int, window_name: string, window_x := -1, 
             window_y = work_area.top;
         }
     }
-    
     rect : RECT;
     rect.right  = xx width;
     rect.bottom = xx height;
@@ -30,8 +29,8 @@ create_window :: (width: int, height: int, window_name: string, window_x := -1, 
     client_height := rect.bottom-rect.top;
 
     // CW_USEDEFAULT :: 0x8000_0000;
-    
-    hwnd := CreateWindowExW(style_ex,
+
+    hwnd := CreateWindowExW(0,
                             utf8_to_wide(WINDOW_CLASS_NAME),
                             utf8_to_wide(window_name),
                             style,
@@ -42,20 +41,6 @@ create_window :: (width: int, height: int, window_name: string, window_x := -1, 
                             null,
                             cast (HINSTANCE) 0, // @Robustness: If we want to run on win98 we need the app hinstance here...
                             null);
-
-    {
-        // Resize the window with respect to the DPI-awareness. If the process is not DPI-aware, then the returned values are unscaled.
-        scaled_x, scaled_y, scaled_width, scaled_height := DPI.os_dpi_get_backing_coordinates(hwnd, xx window_x, xx window_y, xx width, xx height);
-        rect: RECT;
-        rect.right  = xx scaled_width;
-        rect.bottom = xx scaled_height;
-        AdjustWindowRect(*rect, style, BOOL.FALSE);
-
-        client_width  = (rect.right-rect.left);
-        client_height = (rect.bottom-rect.top);
-
-        SetWindowPos(hwnd, HWND_TOPMOST, xx scaled_x, xx scaled_y, client_width, client_height, SWP_NOACTIVATE|SWP_NOZORDER);
-    }
 
     if hwnd == null {
         log_error("CreateWindowExW returned 0.\n");
@@ -137,7 +122,6 @@ FULLSCREEN_STYLE       : u32 : WS_VISIBLE | WS_POPUP;
 SECONDARY_WINDOW_STYLE : u32 : WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME;
 
 #scope_file
-DPI :: #import "DPI";
 
 window_class_initted := false;
 WINDOW_CLASS_NAME :: "Default Window Class";

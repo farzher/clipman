@@ -15,7 +15,7 @@ json_write_file :: (filename: string, value: $T, indent_char := "\t", ignore := 
 	builder: String_Builder;
 	defer free_buffers(*builder);
 	json_append_value(*builder, value, indent_char, ignore);
-	return write_entire_file(filename, builder);
+	return write_entire_file(filename, *builder);
 }
 
 json_append_value :: (builder: *String_Builder, val: $T, indent_char := "\t", ignore := ignore_by_note) {
@@ -67,7 +67,7 @@ ignore_by_note :: (member: *Type_Info_Struct_Member) -> bool {
 
 #scope_module
 
-WHITESPACE_CHARS :: " \t\n";
+WHITESPACE_CHARS :: " \t\n\r";
 
 #load "generic.jai";
 #load "typed.jai";
@@ -99,7 +99,7 @@ json_append_escaped :: (builder: *String_Builder, str: string) {
 
 index_of_illegal_string_char :: (str: string) -> s64 {
 	for 0..str.count - 1 {
-		if str[it] == #char "\\" ||str[it] == #char "\"" || str[it] == #char "\n" || str[it] <= 0x1F {
+		if str[it] == #char "\\" || str[it] == #char "\"" || str[it] == #char "\n" || str[it] <= 0x1F {
 			return it;
 		}
 	}
@@ -108,7 +108,7 @@ index_of_illegal_string_char :: (str: string) -> s64 {
 
 expect_and_slice :: (str: string, expected: string) -> remainder: string, success: bool {
 	if str.count < expected.count || !equal(slice(str, 0, expected.count), expected) {
-		report_error("Unexpected token. Expected \"%\" but got: %", expected, str);
+		log_error("Unexpected token. Expected \"%\" but got: %", expected, str);
 		return str, false;
 	}
 	remainder := advance(str, expected.count);
@@ -191,10 +191,6 @@ unescape :: (str: string) -> result: string, success: bool {
 	}
 	result.count = rc;
 	return result, true;
-}
-
-report_error :: (format: string, args: .. Any) {
-    log(format, .. args);
 }
 
 #import "Basic";

@@ -27,8 +27,8 @@ build :: () {
       // Debug.enable_signal_handler();
       // Debug.set_report_mode(false);
 
-      // options.backend = .X64;
-      // options.x64_options.enable_register_allocation = true;
+      options.backend = .X64;
+      options.x64_options.enable_register_allocation = true;
     } else { // -release
       options.output_path = "release/";
       options.output_executable_name = "clipman";

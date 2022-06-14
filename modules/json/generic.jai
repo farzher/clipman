@@ -21,7 +21,7 @@ JSON_Value :: struct {
 		boolean: bool;
 		number: float64;
 		str: string;
-		array: [..] JSON_Value;
+		array: [] JSON_Value;
 		object: *JSON_Object;
 	};
 }
@@ -56,7 +56,7 @@ json_parse_file :: (filename: string) -> JSON_Value, success: bool {
     file_data, success := read_entire_file(filename);
 	result: JSON_Value;
 	if !success		{
-		report_error("Couldn’t read file");
+		log_error("Couldn’t read file");
 		return result, false;
 	}
 	defer free(file_data);
@@ -73,7 +73,7 @@ json_parse_string :: (content: string) -> JSON_Value, success: bool {
 
 	remainder = trim_left(remainder, WHITESPACE_CHARS);
 	if remainder.count {
-		report_error("Unexpected trailing characters: %", remainder);
+		log_error("Unexpected trailing characters: %", remainder);
 		return result, false;
 	}
 
@@ -213,7 +213,7 @@ get_as :: (val: JSON_Value, $T: Type) -> T {
 				assert(val.type == .STRING, "Expected a % but got %", T, val.type);
 				return val.str;
 			END;
-		} else if T == [..] JSON_Value {
+		} else if T == [] JSON_Value {
 			return #string END
 				assert(val.type == .ARRAY, "Expected a % but got %", T, val.type);
 				return val.array;
@@ -272,7 +272,7 @@ parse_value :: (to_parse: string) -> JSON_Value, remainder: string, success: boo
 	return result, remainder, success;
 }
 
-parse_array:: (str: string) -> result: [..] JSON_Value, remainder: string, success: bool {
+parse_array:: (str: string) -> result: [] JSON_Value, remainder: string, success: bool {
 	assert(str[0] == #char "[", "Invalid object start %", str);
 	remainder := advance(str);
 	result: [..] JSON_Value;

@@ -57,7 +57,6 @@ InsertMenuW :: (hmenu: HMENU, uposition: u32, uflags: u32, uidnewitem: u64, lpne
 
 GetMessageW :: (lpMsg: *MSG, hwnd: HWND, wMsgFilterMin: u32, wMsgFilterMax: u32) -> BOOL #foreign user32;
 
-CreateIoCompletionPort :: (FileHandle: HANDLE, ExistingCompletionPort: HANDLE, CompletionKey: u64, NumberOfConcurrentThreads: DWORD) -> HANDLE #foreign kernel32;
 // GetQueuedCompletionStatus :: (CompletionPort: HANDLE, lpNumberOfBytesTransferred: *DWORD, lpCompletionKey: *u64, lpOverlapped: *LPOVERLAPPED, dwMilliseconds: DWORD) -> BOOL
 LPOVERLAPPED :: struct {}
 

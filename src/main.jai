@@ -274,28 +274,38 @@ update :: () {
 
           case 517; // right click release
 
-            selection := popup_menu(.["Exit", "Encrypt", "Open"]);
+            selection := popup_menu(.["Exit", "Encrypt", "Import from Ditto", "Open"]);
             if selection == {
+
               case "Exit"; exit(0);
+
               case "Open"; show_window(true);
+
+              case "Import from Ditto";
+                if is_db_locked break; // db is currently locked
+
+                cditto_filepath := showinputbox("ditto.db filepath", "ditto.db filepath", ispassword=false);
+                if cditto_filepath == null then break;
+                ditto_filepath := copy_temporary_string(fromcstr(cditto_filepath));
+
+                import_from_ditto_db(ditto_filepath);
+
               case "Encrypt";
-                if is_db_locked {
-                  // db cannot be encrypted because it's currently locked
-                  break;
-                }
+                if is_db_locked break; // db cannot be encrypted because it's currently locked
 
                 cpassword := showinputbox("Enter a password", "Enter a password");
                 if cpassword == null then break;
-                password := copy_string(fromcstr(cpassword), tallocator);
+                password := copy_temporary_string(fromcstr(cpassword));
 
                 cconfirmpassword := showinputbox("Confirm password", "Confirm password");
                 if cconfirmpassword == null then break;
-                confirmpassword := copy_string(fromcstr(cconfirmpassword), tallocator);
+                confirmpassword := copy_temporary_string(fromcstr(cconfirmpassword));
 
                 if confirmpassword != password then break;
 
                 db.rekey(password);
                 mylog("rekey() with pw:", password);
+
             }
 
         }
@@ -353,7 +363,7 @@ render :: () {
 
       record_height := config.record_height;
       if record.type != .BITMAP && hover_index == i {
-        line_count := count(record.preview, "\n") + 1;
+        line_count := Strings.count(record.preview, "\n") + 1;
         if line_count > config.record_lines {
           record_height += (line_count - config.record_lines) * (config.record_height/config.record_lines);
         }
@@ -397,7 +407,7 @@ render :: () {
       }
 
 
-      for line, line_count: line_split(record.preview) {
+      for line, line_count: Strings.line_split(record.preview) {
         if hover_index != i {
           if line_count >= config.record_lines then break;
         } else {
@@ -409,7 +419,7 @@ render :: () {
         if search_string.count {
           text_x := 12;
           text_y := -12/2 + window_height - i*config.record_height - my_font.character_height*(line_count+1);
-          for split(line, <<search_string, keep_separator=.AS_PREFIX, compare=ignore_case) {
+          for Strings.split(line, <<search_string, keep_separator=.AS_PREFIX, compare=Strings.ignore_case) {
             text := it;
             if it_index > 0 {
               matchingtext := it;
@@ -674,10 +684,10 @@ do_submit_selected :: () {
     case .FILE;
       push_tallocator();
       filesstr: string;
-      for line: line_split(record.preview) {
+      for line: Strings.line_split(record.preview) {
         // todo: first_index is broken!!!
-        // filesstr = strings_alloc.join(filesstr, substring(line, first_index(line, " - ")+" - ".count), "\0");
-        filesstr = strings_alloc.join(filesstr, substring(line, String.find_index_from_left(line, " - ")+" - ".count), "\0");
+        // filesstr = strings_alloc.join(filesstr, Strings.substring(line, first_index(line, " - ")+" - ".count), "\0");
+        filesstr = strings_alloc.join(filesstr, Strings.substring(line, Strings.first_index(line, " - ")+" - ".count), "\0");
       }
       if record.preview.count then os_clipboard_set_file(hwnd, filesstr);
   }
@@ -700,7 +710,7 @@ on_copy :: () {
   files := os_clipboard_get_file(hwnd);
   if files.count {
     for f, i: files {
-      files[i] = tprint("% - %", substring(f, mylastindex(f, #char "\\")+"\\".count), f);
+      files[i] = tprint("% - %", Strings.substring(f, mylastindex(f, #char "\\")+"\\".count), f);
     }
     str := strings_alloc.join(files, "\n", tallocator);
     insert_into_db(str, .FILE);
@@ -756,6 +766,62 @@ insert_into_db :: (_str: string, copy_type: COPY_TYPE = .TEXT) {
   scroll_offset = 0;
 }
 
+import_from_ditto_db :: (ditto_filepath: string) {
+  MAXIMUM_CLIP_LENGTH :: 10_000;
+
+  mylog("starting ditto import");
+
+  ditto :: #import "mysqlite3"(id="ditto");
+
+  #import "File_Utilities";
+  if !file_exists(ditto_filepath) {
+    mylog("ditto_filepath doesn't exist:", ditto_filepath);
+    return;
+  }
+
+  err := ditto.open(temp_c_string(ditto_filepath));
+  if err {
+    mylog("failed to open ditto_filepath:", ditto_filepath);
+    return;
+  }
+
+  for ditto.select("select ooData, lDate, lastPasteDate from Main join Data ON Data.lParentID=Main.lID where strClipBoardFormat=?", "CF_UNICODETEXT") {
+    push_tallocator();
+    auto_release_temp();
+
+    ooData        := ditto.get_txt(it, 0);
+    if ooData.count > MAXIMUM_CLIP_LENGTH  continue;
+
+    first_seen_at := ditto.get_int(it, 1);
+    last_seen_at  := ditto.get_int(it, 2);
+
+
+    inserted := tmp_insert_into_db(ooData, first_seen_at, last_seen_at);
+    if inserted mylog(ooData);
+  }
+
+  tmp_insert_into_db :: (str: string, first_seen_at: int, last_seen_at: int, copy_type: COPY_TYPE = .TEXT) -> success: bool {
+    exists_id: int;
+    for db.select("select id from copy where preview = ? and type=? limit 1", str, cast(int)copy_type)
+      exists_id = db.get_int(it, 0);
+
+    if exists_id return false;
+
+    success := db.query("INSERT INTO copy (preview, last_seen_at, first_seen_at, type) VALUES (?, ?, ?, ?)", str, last_seen_at, first_seen_at, cast(int)copy_type);
+    if !success then {
+      mylog("!success", first_seen_at);
+      return false;
+    }
+
+    total_copy_count += 1;
+    selected_index = 0;
+    scroll_offset = 0;
+    return true;
+  }
+
+  mylog("ditto import finished");
+}
+
 
 
 
@@ -767,7 +833,7 @@ config_load :: () {
   file_data, file_success := read_entire_file(CONFIG_PATH);
 
   if(file_success) {
-    replace(file_data, "\r\n", #char" "); // because the json reader can't deal with newlines ... at least not windows newlines
+    // Strings.replace(file_data, "\r\n", #char" "); // because the json reader can't deal with newlines ... at least not windows newlines
     root, parse_success := json_parse_string(file_data, type_of(config));
     if(parse_success) {
       config = root;
@@ -812,6 +878,7 @@ Simp :: #import "Simp";
 #import "Window_Creation";
 #import "Windows_Utf8";
 
-String :: #import "String";
-#import "Strings";
+// #import "String";
+Strings :: #import "Strings";
+for_expansion :: Strings.for_expansion; // this is gross
 strings_alloc :: #import "Strings_Alloc";

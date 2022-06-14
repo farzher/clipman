@@ -1,10 +1,13 @@
 #import "sqlite3";
 #import "mybasic";
 
+#module_parameters(id: string = ""); // so we can load multiple db at the same time
+
 db: *sqlite3db;
 
 open :: (filename: *u8) -> err: bool {
-  err := !!sqlite3_open(filename, *db);
+  // TODO: if the file doesn't exist it creates a db for you and does not error. this isn't always what i want
+  err : bool = xx sqlite3_open(filename, *db);
   if err then mylog("open error:", to_string(sqlite3_errmsg(db)));
   return err;
 }

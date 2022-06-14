@@ -336,14 +336,14 @@ popup_menu :: (items: []string) -> string {
 
 
 
-
-showinputbox :: (title: *u8, message: *u8) -> *u8 {
+// maybe just use imgui instead? this thing looks like trash
+showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
   // DialogBoxParamW :: (hInstance: HINSTANCE, lpTemplate: LPCWSTR, hWndParent: HWND, lpDialogFunc: *void, dwInitParam: LPARAM) -> s32 #foreign user32;
   tinyfd :: #foreign_library,no_dll "../bin/tinyfiledialogs64";
   tinyfd_inputBox :: (title: *u8, message: *u8, defaultinput: *u8) -> *u8 #foreign tinyfd;
 
-  // memory leak?
-  return tinyfd_inputBox(title, message, null);
+  // memory leak? where's the memory for the returned string? is it really on the stack?
+  return tinyfd_inputBox(title, message, ifx ispassword null else cast(*u8)"1");
 }
 
 
