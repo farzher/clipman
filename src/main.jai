@@ -134,9 +134,11 @@ init_db :: (key: string = "") {
   SQL);
 
   // auto delete big clips like images on startup, to keep the db small
+  // but only if they haven't been used in a bit
   if config.on_startup_delete_clips_bigger_than {
     db.query(#string SQL
       DELETE FROM copy WHERE length(cast(preview as blob)) > ?
+      AND DATETIME(last_seen_at, 'unixepoch') < DATETIME('now', '-7 day')
     SQL, config.on_startup_delete_clips_bigger_than);
   }
   db.query("VACUUM");
