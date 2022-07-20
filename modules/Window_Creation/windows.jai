@@ -30,7 +30,7 @@ create_window :: (width: int, height: int, window_name: string, window_x := -1, 
 
     // CW_USEDEFAULT :: 0x8000_0000;
 
-    hwnd := CreateWindowExW(0,
+    hwnd := CreateWindowExW(style_ex,
                             utf8_to_wide(WINDOW_CLASS_NAME),
                             utf8_to_wide(window_name),
                             style,
