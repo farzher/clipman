@@ -11,7 +11,7 @@ boyer_moore_first_index :: (haystack: string, needle: string, start_index: int, 
         thread_data[context.thread_index].last_search_was_reversed = false;
         // @TODO we should reuse this string buffer until we need to replace it for a larger needle
         if thread_data[context.thread_index].last_used_needle  free(thread_data[context.thread_index].last_used_needle);
-        thread_data[context.thread_index].last_used_needle = copy_string(needle, __default_allocator);
+        thread_data[context.thread_index].last_used_needle = my_copy_string(needle, __default_allocator);
         make_bad_character_delta(needle, compare, false);
         make_good_suffix_delta(needle, compare, false);
     }
@@ -41,7 +41,7 @@ boyer_moore_last_index :: (haystack: string, needle: string, start_index: int, c
     if needle != thread_data[context.thread_index].last_used_needle || !thread_data[context.thread_index].last_search_was_reversed {
         thread_data[context.thread_index].last_search_was_reversed = true;
         if thread_data[context.thread_index].last_used_needle  free(thread_data[context.thread_index].last_used_needle);
-        thread_data[context.thread_index].last_used_needle = copy_string(needle, __default_allocator);
+        thread_data[context.thread_index].last_used_needle = my_copy_string(needle, __default_allocator);
         make_bad_character_delta(needle, compare, true);
         make_good_suffix_delta(needle, compare, true);
     }
@@ -99,7 +99,7 @@ unsafe_boyer_moore_first_index :: (haystack: string, needle: string, start_index
     if needle != thread_data[context.thread_index].last_used_needle || thread_data[context.thread_index].last_search_was_reversed {
         thread_data[context.thread_index].last_search_was_reversed = false;
         if thread_data[context.thread_index].last_used_needle  free(thread_data[context.thread_index].last_used_needle);
-        thread_data[context.thread_index].last_used_needle = copy_string(needle, __default_allocator);
+        thread_data[context.thread_index].last_used_needle = my_copy_string(needle, __default_allocator);
         make_bad_character_delta(needle, compare, false);
         make_good_suffix_delta(needle, compare, false);
     }
@@ -160,7 +160,7 @@ boyer_moore_sse2_first_index :: (haystack: string, needle: string, start_index: 
     if needle != thread_data[context.thread_index].last_used_needle || thread_data[context.thread_index].last_search_was_reversed {
         thread_data[context.thread_index].last_search_was_reversed = false;
         if thread_data[context.thread_index].last_used_needle  free(thread_data[context.thread_index].last_used_needle);
-        thread_data[context.thread_index].last_used_needle = copy_string(needle, __default_allocator);
+        thread_data[context.thread_index].last_used_needle = my_copy_string(needle, __default_allocator);
         make_bad_character_delta(needle, compare, false);
         make_good_suffix_delta(needle, compare, false);
     }
@@ -361,7 +361,7 @@ boyer_moore_sse2_last_index :: (haystack: string, needle: string, start_index: i
     if needle != thread_data[context.thread_index].last_used_needle || !thread_data[context.thread_index].last_search_was_reversed {
         thread_data[context.thread_index].last_search_was_reversed = true;
         if thread_data[context.thread_index].last_used_needle  free(thread_data[context.thread_index].last_used_needle);
-        thread_data[context.thread_index].last_used_needle = copy_string(needle, __default_allocator);
+        thread_data[context.thread_index].last_used_needle = my_copy_string(needle, __default_allocator);
         make_bad_character_delta(needle, compare, true);
         make_good_suffix_delta(needle, compare, true);
     }
@@ -506,7 +506,7 @@ boyer_moore_avx2_first_index :: (haystack: string, needle: string, start_index: 
     if needle != thread_data[context.thread_index].last_used_needle || thread_data[context.thread_index].last_search_was_reversed {
         thread_data[context.thread_index].last_search_was_reversed = false;
         if thread_data[context.thread_index].last_used_needle  free(thread_data[context.thread_index].last_used_needle);
-        thread_data[context.thread_index].last_used_needle = copy_string(needle, __default_allocator);
+        thread_data[context.thread_index].last_used_needle = my_copy_string(needle, __default_allocator);
         make_bad_character_delta(needle, compare, false);
         make_good_suffix_delta(needle, compare, false);
     }
@@ -641,7 +641,7 @@ boyer_moore_avx2_last_index :: (haystack: string, needle: string, start_index: i
     if needle != thread_data[context.thread_index].last_used_needle || !thread_data[context.thread_index].last_search_was_reversed {
         thread_data[context.thread_index].last_search_was_reversed = true;
         if thread_data[context.thread_index].last_used_needle  free(thread_data[context.thread_index].last_used_needle);
-        thread_data[context.thread_index].last_used_needle = copy_string(needle, __default_allocator);
+        thread_data[context.thread_index].last_used_needle = my_copy_string(needle, __default_allocator);
         make_bad_character_delta(needle, compare, true);
         make_good_suffix_delta(needle, compare, true);
     }
