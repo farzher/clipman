@@ -136,18 +136,76 @@ utc_to_time_ago :: (oldutc: int) -> string {
 
 #import "lz4-1.9.1";
 compress :: (str: string) -> string {
-  compressed := talloc_string(str.count + 1024/*some extra space incase the compressed version is bigger? perf: i think i only need + 1 extra byte here*/);
+  compressed := talloc_string(str.count + 1024*10/*some extra space incase the compressed version is bigger? perf: i think i only need + 1 extra byte here*/);
+  // nvm this actually started crashing with str.count + 1024, i needed to put 1024*10 to stop the crash when copying an image
+
   bytes_written := LZ4_compress_default(str.data , compressed.data, xx str.count, xx compressed.count);
   if bytes_written <= 0  die("compress error");
   compressed.count = bytes_written;
   return compressed;
 }
 decompress :: (compressed: string) -> string {
-  decompressed := talloc_string(1024 * 1024 * 50 /*50mb is the max we can decompress. 4k monitor screenshots are like 32MB*/);
+  decompressed := talloc_string(1024 * 1024 * 75 /*75mb is the max we can decompress. 4k monitor screenshots are like 32MB a picture from my phone was crashing at 60mb ... */);
   bytes_written := LZ4_decompress_safe(compressed.data, decompressed.data, xx compressed.count, xx decompressed.count);
   if bytes_written <= 0  die("decompress error");
   decompressed.count = bytes_written;
   return decompressed;
+}
+
+
+
+String :: #import "String";
+#import "stb_image_write";
+save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
+
+  bitmap: Simp.Bitmap;
+  // Simp.bitmap_load_from_memory(*bitmap, xx bitmapinfobytes);
+  bmpinfo: *BITMAPINFO = xx bitmapinfobytes.data;
+  bitmap.width = bmpinfo.bmiHeader.biWidth;
+  bitmap.height = bmpinfo.bmiHeader.biHeight;
+  bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFO); // is this actually correct?
+
+
+  // bitmap.format = .BGRA8;
+  _size, _stride := Simp.get_image_size(bitmap.format, bitmap.width, bitmap.height);
+  bitmap.stride = xx _stride;
+
+  // doesn't support bgr
+  // Simp.bitmap_save(*bitmap, filepath);
+
+  stride := bitmap.stride;
+  data   := bitmap.data.data;
+
+  components : s32 = 4;
+  if bitmap.format == .RGB8 components = 3;
+
+  // change format from .BGRA8 to .RGBA8
+  // wtf??? this is so weird.
+  bitmap.data.count = _size;
+  for i: 0 .. bitmap.width*bitmap.height-1 {
+    Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
+  }
+
+
+  name      := temp_c_string(filepath);
+  extension := String.path_extension(filepath);
+
+  stbi_flip_vertically_on_write(1); // image was being saved upside down. again wtf????
+  if extension == {
+    case "png";
+      return stbi_write_png(name, bitmap.width, bitmap.height, components, data, stride) != 0;
+    case "tga";
+      return stbi_write_tga(name, bitmap.width, bitmap.height, components, data, stride) != 0;
+    case "bmp";
+      return stbi_write_bmp(name, bitmap.width, bitmap.height, components, data, stride) != 0;
+    case "hdr";
+      return stbi_write_hdr(name, bitmap.width, bitmap.height, components, data, stride) != 0;
+    case "jpg";
+      return stbi_write_jpg(name, bitmap.width, bitmap.height, components, data, stride, quality=80) != 0;
+    case;
+      mylog("Bitmap extension", extension, "is not understood by this code.");
+      return false;
+  }
 }
 
 
@@ -178,7 +236,9 @@ TextureCache: struct {
     bitmap.width = bmpinfo.bmiHeader.biWidth;
     bitmap.height = bmpinfo.bmiHeader.biHeight;
     bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFO); // is this actually correct?
-    bitmap.stride = 4;
+    // bitmap.format = .BGRA8;
+    _size, _stride := Simp.get_image_size(bitmap.format, bitmap.width, bitmap.height);
+    bitmap.stride = xx _stride;
 
     success := Simp.texture_load_from_bitmap(*texture, *bitmap);
     if !success  die("failed to load texture", record.id);

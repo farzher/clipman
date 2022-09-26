@@ -125,6 +125,7 @@ init_db :: (key: string = "") {
     CREATE TABLE IF NOT EXISTS copy (
        id INTEGER PRIMARY KEY,
        preview VARCHAR(255) NOT NULL,
+       preview_hash INTEGER,
        full_text TEXT,
        first_seen_at UNSIGNED BIG INT NOT NULL,
        last_seen_at UNSIGNED BIG INT NOT NULL,
@@ -135,16 +136,25 @@ init_db :: (key: string = "") {
 
   // auto delete big clips like images on startup, to keep the db small
   // but only if they haven't been used in a bit
+  // this is slow and causes a slow startup
   if config.on_startup_delete_clips_bigger_than {
     db.query(#string SQL
       DELETE FROM copy WHERE length(cast(preview as blob)) > ?
       AND DATETIME(last_seen_at, 'unixepoch') < DATETIME('now', '-7 day')
     SQL, config.on_startup_delete_clips_bigger_than);
   }
-  db.query("VACUUM");
+  db.query("VACUUM"); // this is slow and causes a slow startup
 
   db.query(#string SQL
     CREATE INDEX IF NOT EXISTS index_last_seen_at ON copy (last_seen_at)
+  SQL);
+
+  db.query(#string SQL
+    CREATE INDEX IF NOT EXISTS index_type ON copy (type)
+  SQL);
+
+  db.query(#string SQL
+    CREATE INDEX IF NOT EXISTS index_preview_hash ON copy (preview_hash)
   SQL);
 
   // todo do i need an index on preview? wouldn't this make the table twice as big?
@@ -566,7 +576,7 @@ update_records :: () {
     // todo split search into multiples on space
     // map(split(search_string), "preview like '%'||?||'%'"
     // join(, " AND ")
-    rows = db.select("select id, preview, last_seen_at, first_seen_at, count, type from copy where preview like '%'||?||'%' ORDER BY last_seen_at DESC LIMIT ? OFFSET ?", <<search_string, max_records, scroll_offset);
+    rows = db.select("select id, preview, last_seen_at, first_seen_at, count, type from copy where type=? and preview like '%'||?||'%' ORDER BY last_seen_at DESC LIMIT ? OFFSET ?", cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
   } else {
     rows = db.select("select id, preview, last_seen_at, first_seen_at, count, type from copy ORDER BY last_seen_at DESC LIMIT ? OFFSET ?", max_records, scroll_offset);
   }
@@ -606,7 +616,7 @@ do_rightclick :: () #expand {
 
   mouse := Mouse.pos();
 
-  selection := popup_menu(.["Delete", "Context"]);
+  selection := popup_menu(.["Delete", "Context", "Save To Downloads"]);
   if selection == {
 
     case "Delete"; mylog("delete menu item not yet supported"); return;
@@ -625,6 +635,24 @@ do_rightclick :: () #expand {
       GetRect.clear_text(*search_input);
       update_records(); // to update records.count; so our selected_index works; i think this will cause us to query twice
       `update_records_handeled = true;
+
+    case "Save To Downloads";
+      selected_index = mouse.y/config.record_height;
+      if selected_index < 0 then return;
+      if selected_index >= records.count then return;
+      record := records[selected_index];
+      if record.type == {
+        case .BITMAP;
+          System :: #import "System";
+          // if you call this too quickly (within the same second) filenames will be the same and overwrite ...
+          // ^ fixed by using getutcms
+          filepath := tprint("C:/Users/%/Downloads/clipman_%.png", System.get_username(), getutcms());
+          success := save_bitmap_to_file(decompress(record.preview), filepath);
+          if !success  mylog("failed to save image");
+
+        case; mylog("can only save bitmaps"); return;
+      }
+
   }
 
 }
@@ -747,19 +775,38 @@ ensure_selection_in_range :: () {
 }
 
 
+// sharex screenshot sends 2 copy events, so this is called twice...
+// also every time we paste a clip we copy it first, which would cause duplicates
+// so we need to deduplicate clips
+// perf: deduplicating images is incrudibly slow. they need to be compared by a hash
 insert_into_db :: (_str: string, copy_type: COPY_TYPE = .TEXT) {
   utc : int = xx getutc();
 
   str := _str; // to make it not immutable
   if copy_type == .BITMAP then str = compress(str);
 
-  id: int;
-  for db.select("select id from copy where preview = ? and type=? limit 1", str, cast(int)copy_type)  id = db.get_int(it, 0);
-
-  if id {
-    db.query("UPDATE copy SET last_seen_at=?, count=count+1 where id=?", utc, id);
+  // if this record has already been inserted, just update it instead of inserting a copy
+  existing_record_id: int;
+  if copy_type == .BITMAP {
+    #import "Hash";
+    hash : int = sdbm_hash(str.data, str.count);
+    for db.select("select id from copy where type=? and preview_hash=? and preview=? limit 1", cast(int)copy_type, hash, str)
+      existing_record_id = db.get_int(it, 0);
   } else {
-    success := db.query("INSERT INTO copy (preview, last_seen_at, first_seen_at, type) VALUES (?, ?, ?, ?)", str, utc, utc, cast(int)copy_type);
+    for db.select("select id from copy where type=? and preview=? limit 1", cast(int)copy_type, str)
+      existing_record_id = db.get_int(it, 0);
+  }
+
+  if existing_record_id {
+    db.query("UPDATE copy SET last_seen_at=?, count=count+1 where id=?", utc, existing_record_id);
+  } else {
+
+    hash : int = 0;
+    if copy_type == .BITMAP {
+      hash = sdbm_hash(str.data, str.count);
+    }
+
+    success := db.query("INSERT INTO copy (preview, preview_hash, last_seen_at, first_seen_at, type) VALUES (?, ?, ?, ?, ?)", str, hash, utc, utc, cast(int)copy_type);
     if !success then return;
     total_copy_count += 1;
   }

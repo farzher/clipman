@@ -115,7 +115,7 @@ AddClipboardFormatListener :: (hwnd: HWND) -> HANDLE #foreign user32;
 SetClipboardViewer :: (hwnd: HWND) -> HANDLE #foreign user32;
 
 SetPriorityClass :: (hProcess: HANDLE, dwPriorityClass: DWORD) -> BOOL #foreign kernel32;
-HIGH_PRIORITY_CLASS :: 0x00000080;
+// HIGH_PRIORITY_CLASS :: 0x00000080;
 
 
 RGBQUAD :: struct {

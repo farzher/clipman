@@ -126,6 +126,18 @@ getutc :: () -> u32 {
   utc: *u64 = xx *filetime;
   return cast(u32)( <<utc / WINDOWS_TICK - SEC_TO_UNIX_EPOCH);
 }
+getutcms :: () -> u64 {
+  systemtime: SYSTEMTIME;
+  GetSystemTime(*systemtime);
+  filetime: FILETIME;
+  SystemTimeToFileTime(*systemtime, *filetime);
+
+  WINDOWS_TICK      :: 10_000_000 / 1000;
+  SEC_TO_UNIX_EPOCH :: 11644473600;
+
+  utc: *u64 = xx *filetime;
+  return <<utc / WINDOWS_TICK - SEC_TO_UNIX_EPOCH;
+}
 
 
 
