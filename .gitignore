@@ -2,5 +2,6 @@
 *.db
 *.json
 *.pdb
+*.codex
 ignore/
 bin/first.exe

@@ -90,6 +90,8 @@ is_streamer_mode: bool;
 is_db_locked: bool;
 is_config_parse_error: bool;
 
+order_by := "last_seen_at";
+
 init_everything :: () {
 
   init_db();
@@ -134,19 +136,23 @@ init_db :: (key: string = "") {
     )
   SQL);
 
-  // auto delete big clips like images on startup, to keep the db small
-  // but only if they haven't been used in a bit
-  // this is slow and causes a slow startup
-  if config.on_startup_delete_clips_bigger_than {
-    db.query(#string SQL
-      DELETE FROM copy WHERE length(cast(preview as blob)) > ?
-      AND DATETIME(last_seen_at, 'unixepoch') < DATETIME('now', '-7 day')
-    SQL, config.on_startup_delete_clips_bigger_than);
-  }
-  db.query("VACUUM"); // this is slow and causes a slow startup
+  // // auto delete big clips like images on startup, to keep the db small
+  // // but only if they haven't been used in a bit
+  // // this is slow and causes a slow startup
+  // if config.on_startup_delete_clips_bigger_than {
+  //   db.query(#string SQL
+  //     DELETE FROM copy WHERE length(cast(preview as blob)) > ?
+  //     AND DATETIME(last_seen_at, 'unixepoch') < DATETIME('now', '-7 day')
+  //   SQL, config.on_startup_delete_clips_bigger_than);
+  // }
+  // db.query("VACUUM"); // this is slow and causes a slow startup
 
   db.query(#string SQL
     CREATE INDEX IF NOT EXISTS index_last_seen_at ON copy (last_seen_at)
+  SQL);
+
+  db.query(#string SQL
+    CREATE INDEX IF NOT EXISTS index_first_seen_at ON copy (first_seen_at)
   SQL);
 
   db.query(#string SQL
@@ -286,12 +292,15 @@ update :: () {
 
           case 517; // right click release
 
-            selection := popup_menu(.["Exit", "Encrypt", "Import from Ditto", "Open"]);
+            selection := popup_menu(.["Exit", "Encrypt", "Cleanup Large Clips", "Config / Settings", "Import from Ditto", "Open"]);
             if selection == {
 
               case "Exit"; exit(0);
 
               case "Open"; show_window(true);
+
+              case "Config / Settings";
+                ShellExecuteA(null, "open", CONFIG_PATH, null, null, SW_SHOW);
 
               case "Import from Ditto";
                 if is_db_locked break; // db is currently locked
@@ -301,6 +310,15 @@ update :: () {
                 ditto_filepath := copy_temporary_string(fromcstr(cditto_filepath));
 
                 import_from_ditto_db(ditto_filepath);
+
+              case "Cleanup Large Clips";
+                if config.on_startup_delete_clips_bigger_than {
+                  db.query(#string SQL
+                    DELETE FROM copy WHERE length(cast(preview as blob)) > ?
+                  SQL, config.on_startup_delete_clips_bigger_than);
+                }
+                db.query("VACUUM"); // this is slow
+                // this vacuum doesn't work. don't understand why: cannot VACUUM - SQL statements in progress
 
               case "Encrypt";
                 if is_db_locked break; // db cannot be encrypted because it's currently locked
@@ -388,7 +406,7 @@ render :: () {
     render_metadata();
     render_metadata :: () #expand {
       if hover_index == i {
-        text_width := Simp.prepare_text(my_tiny_font, utc_to_time_ago(record.last_seen_at));
+        text_width := Simp.prepare_text(my_tiny_font, utc_to_time_ago(record.first_seen_at));
         // text_width := Simp.prepare_text(my_tiny_font, tprint("%", record.last_seen_at));
         Simp.draw_prepared_text(my_tiny_font, window_width-text_width-10, window_height - i*config.record_height - config.record_height+12, COLORS.TEXT);
       }
@@ -571,14 +589,17 @@ update_records :: () {
   for records  free(it.preview); // perf: could write all records strings into a single buffer, then i'd never need to free it, just overwrite
   records.count = 0;
 
+  // reset order back to default if we scroll top the top or start searching
+  if scroll_offset == 0 || search_string.count then order_by = "last_seen_at";
+
   rows: #run type_of(db.select(""));
   if search_string.count {
     // todo split search into multiples on space
     // map(split(search_string), "preview like '%'||?||'%'"
     // join(, " AND ")
-    rows = db.select("select id, preview, last_seen_at, first_seen_at, count, type from copy where type=? and preview like '%'||?||'%' ORDER BY last_seen_at DESC LIMIT ? OFFSET ?", cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
+    rows = db.select(to_c_string(interp("select id, preview, last_seen_at, first_seen_at, count, type from copy where type=? and preview like '%'||?||'%' ORDER BY %{`order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
   } else {
-    rows = db.select("select id, preview, last_seen_at, first_seen_at, count, type from copy ORDER BY last_seen_at DESC LIMIT ? OFFSET ?", max_records, scroll_offset);
+    rows = db.select(to_c_string(interp("select id, preview, last_seen_at, first_seen_at, count, type from copy ORDER BY %{`order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
   }
 
   for row: rows {
@@ -622,14 +643,17 @@ do_rightclick :: () #expand {
     case "Delete"; mylog("delete menu item not yet supported"); return;
 
     case "Context";
-      if search_string.count == 0 then return;
+      // if search_string.count == 0 then return;
       // is_mouse_in_right_half := mouse.x >= window_width/4;
       // if !is_mouse_in_right_half then return;
       selected_index = mouse.y/config.record_height;
       if selected_index < 0 then return;
       if selected_index >= records.count then return;
       record := records[selected_index];
-      scroll_offset = db.select_int("select count(1) from copy where last_seen_at > ?", record.last_seen_at);
+
+      order_by = "first_seen_at";
+
+      scroll_offset = db.select_int("select count(1) from copy where first_seen_at > ?", record.first_seen_at);
       scroll_offset -= max_records/2;
       selected_index = max_records/2;
       GetRect.clear_text(*search_input);
@@ -778,7 +802,6 @@ ensure_selection_in_range :: () {
 // sharex screenshot sends 2 copy events, so this is called twice...
 // also every time we paste a clip we copy it first, which would cause duplicates
 // so we need to deduplicate clips
-// perf: deduplicating images is incrudibly slow. they need to be compared by a hash
 insert_into_db :: (_str: string, copy_type: COPY_TYPE = .TEXT) {
   utc : int = xx getutc();
 
@@ -788,8 +811,10 @@ insert_into_db :: (_str: string, copy_type: COPY_TYPE = .TEXT) {
   // if this record has already been inserted, just update it instead of inserting a copy
   existing_record_id: int;
   if copy_type == .BITMAP {
+
     #import "Hash";
     hash : int = sdbm_hash(str.data, str.count);
+    mylog("insert_into_db .BITMAP", hash);
     for db.select("select id from copy where type=? and preview_hash=? and preview=? limit 1", cast(int)copy_type, hash, str)
       existing_record_id = db.get_int(it, 0);
   } else {
@@ -931,3 +956,10 @@ Simp :: #import "Simp";
 Strings :: #import "Strings";
 for_expansion :: Strings.for_expansion; // this is gross
 strings_alloc :: #import "Strings_Alloc";
+
+to_c_string :: (s: string, allocator: Allocator = .{}) -> *u8 {
+  result : *u8 = alloc(s.count + 1, allocator);
+  memcpy(result, s.data, s.count);
+  result[s.count] = 0;
+  return result;
+}

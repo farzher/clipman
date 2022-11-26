@@ -194,6 +194,9 @@ NIM_SETVERSION :: 0x04;
 DwmFlush :: () -> HRESULT #foreign Dwmapi;
 
 
+ShellExecuteA :: (hwnd: HWND, lpOperation: *u8, lpFile: *u8, lpParmeters: *u8, lpDirectory: *u8, nShowCmd: int) -> s32 #foreign shell32;
+ShellExecuteW :: (hwnd: HWND, lpOperation: *u8, lpFile: *u8, lpParmeters: *u8, lpDirectory: *u8, nShowCmd: int) -> s32 #foreign shell32;
+
 #scope_file
 ntdll       :: #foreign_system_library "Ntdll";
 kernel32    :: #foreign_system_library "kernel32";

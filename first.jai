@@ -7,6 +7,8 @@
   to built-in jai modules to support features like clipboard copy events
 */
 
+// works with jai beta v0.1.045
+
 RELEASE :: #run get_build_options().optimization_level == .RELEASE;
 main_filepath :: "src/main.jai";
 exe_icon_path :: "bin/tray.ico";
@@ -28,7 +30,7 @@ build :: () {
       // Debug.set_report_mode(false);
 
       options.backend = .X64;
-      options.x64_options.enable_register_allocation = true;
+      // options.x64_options.enable_register_allocation = true;
     } else { // -release
       options.output_path = "release/";
       options.output_executable_name = "clipman";
@@ -38,7 +40,7 @@ build :: () {
     }
   }
 
-  { // -impor_dir ./modules
+  { // -import_dir ./modules
     import_path: [..] string;
     array_add(*import_path, "./modules");
     array_add(*import_path, ..options.import_path);

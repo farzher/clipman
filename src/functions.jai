@@ -146,6 +146,7 @@ compress :: (str: string) -> string {
 }
 decompress :: (compressed: string) -> string {
   decompressed := talloc_string(1024 * 1024 * 75 /*75mb is the max we can decompress. 4k monitor screenshots are like 32MB a picture from my phone was crashing at 60mb ... */);
+  // decompressed := talloc_string(1024 * 1024 * 200 /*200mb is the max we can decompress. 4k monitor screenshots are like 32MB a picture from my phone was crashing at 60mb ... */);
   bytes_written := LZ4_decompress_safe(compressed.data, decompressed.data, xx compressed.count, xx decompressed.count);
   if bytes_written <= 0  die("decompress error");
   decompressed.count = bytes_written;

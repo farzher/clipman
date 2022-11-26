@@ -142,6 +142,103 @@ getutcms :: () -> u64 {
 
 
 
+// tstr
+TStr :: struct {#as str: string; }
+tstr: TStr;
+to_tstr :: (str: string) -> TStr {
+   s: TStr = ---;
+   s.str = str;
+   return s;
+}
+tstr_join :: (a:string, b:string) -> string {
+    bytes := 0;
+    bytes += a.count;
+    bytes += b.count;
+    if !bytes return "";
+
+    result: string;
+    result.count = bytes;
+    result.data  = talloc(bytes);
+    assert(result.data != null);
+
+    cursor := result.data;
+    memcpy(cursor, a.data, a.count);
+    cursor += a.count;
+    memcpy(cursor, b.data, b.count);
+
+    cursor += b.count;
+    assert(cursor == result.data + result.count);
+
+    return result;
+}
+operator + :: (a: TStr, b: TStr) -> TStr {
+  return to_tstr(tstr_join(a.str, b.str));
+}
+operator + :: (a: TStr, b: string) -> TStr #symmetric {
+   return a + to_tstr(b);
+}
+operator + :: (a: TStr, b: int) -> TStr #symmetric {
+   return to_tstr(tprint("%+%", a.str, b));
+}
+
+
+
+interp :: (_str: string) -> string #expand {
+  #insert -> string {
+    String :: #import "String";
+
+    builder: String_Builder;
+
+    str := String.replace(_str, "\n", "\\n");
+
+    codestart := 0;
+    strstart := 0;
+
+    for i: 0 .. str.count-1 {
+
+      //
+      if (str[i] == #char"#" || str[i] == #char"%") && str[i+1] == #char"{" {
+
+        append(*builder, tstr+ "+\""+String.slice(str, strstart, i-strstart)+"\"");
+
+        i += 2;
+        codestart = i;
+        continue;
+      }
+
+      if codestart {
+        if str[i] == #char"}" {
+          code := String.slice(str, codestart, i-codestart);
+          code = String.replace(code, "'", "\"");
+          append(*builder, tstr+ "+("+code+")");
+          i += 1;
+          strstart = i;
+          codestart = 0;
+        }
+      }
+
+      if i == str.count-1 {
+        append(*builder, tstr+ "+\""+String.slice(str, strstart, strstart+i+1)+"\"");
+      }
+    }
+
+    return tstr+ "return tstr" + builder_to_string(*builder) + ";";
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #scope_file
 #if OS == .WINDOWS {
   #import "Windows";
