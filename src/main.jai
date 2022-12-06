@@ -3,7 +3,10 @@
 APP_NAME      :: "ClipMan";
 VERSION       :: "v0.0.0";
 CONFIG_PATH   :: "clipman.json";
-config: struct { // overwitten by config_load
+
+// default config
+// overwitten by config_load
+config: struct {
   window_width      : int    = 1200;
   window_height     : int    = 840;
   record_height     : int    = 70;
@@ -17,6 +20,8 @@ config: struct { // overwitten by config_load
   db_name           : string = "clipman.db";
   remember_password : string = "";
 }
+
+// these values are calculated based on the config data
 window_width  : int; // defined by config_load
 window_height : int; // defined by config_load
 max_records   : int; // defined by config_load
@@ -28,8 +33,7 @@ hwnd    : HWND;
 
 
 main :: () {
-
-  set_cwd_to_exe_location(); // ensures we read are write files next to the exe, whereever it is
+  set_cwd_to_exe_location(); // ensures we read and write files next to the exe, whereever it is
 
   config_load(); // load the config first
 
@@ -53,7 +57,6 @@ main :: () {
 
   // init Simp rendering stuff
   Simp.set_render_target(hwnd);
-  // Simp.simp_init(hwnd, xx window_width, xx window_height, xx window_width, xx window_height, windowed=true, vsync=true);
 
   // init everything
   init_everything();
@@ -896,26 +899,32 @@ import_from_ditto_db :: (ditto_filepath: string) {
 
 
 
-#import,dir "modules/json";
-#import "File";
+// depends on many globals
 config_load :: () {
-  file_data, file_success := read_entire_file(CONFIG_PATH);
+  file :: #import "File";
+  json :: #import,dir "modules/json";
 
-  if(file_success) {
-    // Strings.replace(file_data, "\r\n", #char" "); // because the json reader can't deal with newlines ... at least not windows newlines
-    root, parse_success := json_parse_string(file_data, type_of(config));
-    if(parse_success) {
-      config = root;
-    } else {
-      is_config_parse_error = true;
-    }
-  } else {
-    write_success := json_write_file(CONFIG_PATH, config, indent_char="\n");
+  // define these globals computed by the newly loaded config data
+  defer {
+    window_width  = config.window_width;
+    window_height = config.record_height * (config.window_height/config.record_height);
+    max_records   = cast(int) ceil(cast(float)window_height / config.record_height);
   }
 
-  window_width  = config.window_width;
-  window_height = config.record_height * (config.window_height/config.record_height);
-  max_records   = cast(int) ceil(cast(float)window_height / config.record_height);
+  // config file doesn't exist. create it using the default config
+  if !file_exists(CONFIG_PATH) {
+    json.json_write_file(CONFIG_PATH, config);
+    return;
+  }
+
+  // read/parse the config file into config
+  file_data, read_success := file.read_entire_file(CONFIG_PATH);
+  if !read_success {is_config_parse_error = true; return; }
+
+  parse_success, parsed_config := json.json_parse_string(file_data, type_of(config));
+  if !parse_success {is_config_parse_error = true; return; }
+
+  config = parsed_config;
 }
 
 
@@ -925,10 +934,16 @@ config_load :: () {
 
 
 
-COPY_TYPE :: enum u8 {TEXT; FILE; BITMAP;}
-DbRecord :: struct {id: int; preview: string; first_seen_at: int; last_seen_at: int; count: int; type: COPY_TYPE; }
-MAX_LINE_LEN  :: 200; // only for rendering performance
-MAX_LINE_COUNT:: 60;  // only for rendering performance
+COPY_TYPE      :: enum u8 {TEXT; FILE; BITMAP;}
+
+DbRecord       :: struct {id: int; preview: string; first_seen_at: int; last_seen_at: int; count: int; type: COPY_TYPE; }
+
+MAX_LINE_LEN   :: 200; // only for rendering performance
+MAX_LINE_COUNT :: 60;  // only for rendering performance
+
+
+// all the junk we depend on
+// all the junk we depend on
 
 #import,file "modules/mybasic.jai";
 #import,file "modules/mywindows.jai";
@@ -939,23 +954,16 @@ for_expansion :: db.for_expansion; // this is gross
 
 COLORS :: #import,dir "modules/colors";
 
-#import "Math";
-
 Simp :: #import "Simp";
+
+using,only(ceil) Math :: #import "Math";
 
 // #import,dir "modules/Input";
 #import "Input"; // we need to use this normal style of import so we import the same Input as getrect
+
 #import,dir "modules/Window_Creation";
 #import "Windows_Utf8";
 
-// #import "String";
-Strings :: #import,dir "modules/Strings";
-for_expansion :: Strings.for_expansion; // this is gross
+Strings       :: #import,dir "modules/Strings";
 strings_alloc :: #import,dir "modules/Strings_Alloc";
-
-to_c_string :: (s: string, allocator: Allocator = .{}) -> *u8 {
-  result : *u8 = alloc(s.count + 1, allocator);
-  memcpy(result, s.data, s.count);
-  result[s.count] = 0;
-  return result;
-}
+for_expansion :: Strings.for_expansion; // this is gross

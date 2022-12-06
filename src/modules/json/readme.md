@@ -8,7 +8,6 @@ The generic `JSON_Value` graphs are a pain to consume and even worse to produce 
 But they allow you to parse any JSON, even if you don’t know the structure (or can’t reproduce it in Jai because it varies).
 
 The typed interface is what you want for most cases.
-**@Incomplete: The typed interface cannot yet parse into float members. (Because I haven’t needed it yet. 🙈) PRs welcome!**
 
 ## Parsing / Deserialization
 
@@ -16,20 +15,33 @@ Parsing is as simple as:
 
 ```Jai
 // Typed version:
-result, success := json_parse_string(json_str, Your_Type_To_Parse_Into);
+success, result := json_parse_string(json_str, Your_Type_To_Parse_Into);
 // … or if you want to get a generic structure back:
-result, success := json_parse_string(json_str);
+success, result := json_parse_string(json_str);
 ```
 
-There are also a convenience functions if the JSON data is in a file:
+There are also a convenience functions for parsing if the JSON data is in a file:
 
 ```Jai
-result, success := json_parse_file(json_filename, Your_Type_To_Parse_Into);
+success, result := json_parse_file(json_filename, Your_Type_To_Parse_Into);
 // … or 
-result := json_parse_file(json_filename);
+success, result := json_parse_file(json_filename);
 ```
 
+
 See [`typed.jai`](./typed.jai) and [`generic.jai`](./generic.jai) for details and additional options.
+
+### Mixed typed and generic data
+
+If you don’t know the structure of some subfield of your `Your_Type_To_Parse_Into` structure, but still want to get these values from the JSON data,
+you can declare these fields as the generic type `JSON_Value` or `*JSON_Value` and the generic parse function will take over at that point:
+
+```
+Your_Type_To_Parse_Into :: struct {
+	name: string;
+	age: int;
+	something_we_dont_know_much_about: *JSON_Value; // Whatever structure hides in the JSON, it will be parsed into JSON_Value.
+}
 
 ## Printing / Serialization
 

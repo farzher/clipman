@@ -237,6 +237,13 @@ set_cwd_to_exe_location :: () {
   set_working_directory(String.path_strip_filename(system.get_path_of_running_executable()));
 }
 
+to_c_string :: (s: string, allocator: Allocator = .{}) -> *u8 {
+  result : *u8 = alloc(s.count + 1, allocator);
+  memcpy(result, s.data, s.count);
+  result[s.count] = 0;
+  return result;
+}
+
 
 
 

@@ -52,32 +52,33 @@ json_free :: (using val: JSON_Value) {
 	}
 }
 
-json_parse_file :: (filename: string) -> JSON_Value, success: bool {
+json_parse_file :: (filename: string) -> success: bool, JSON_Value {
     file_data, success := read_entire_file(filename);
 	result: JSON_Value;
 	if !success		{
-		log_error("Couldn’t read file");
-		return result, false;
+		log_error("Could not read file");
+		return false, result;
 	}
 	defer free(file_data);
 
-
 	if context.log_level >= .VERBOSE log("Read file: %", success);
-	result, success = json_parse_string(file_data);
-	return result, success;
+	success, result = json_parse_string(file_data);
+	return success, result;
 }
 
-json_parse_string :: (content: string) -> JSON_Value, success: bool {
+json_parse_string :: (content: string) -> success: bool, JSON_Value {
+    if !content then return false, .{};
+
 	result, remainder, success := parse_value(content);
-	if !success		return result, false;
+	if !success		return false, result;
 
 	remainder = trim_left(remainder, WHITESPACE_CHARS);
 	if remainder.count {
 		log_error("Unexpected trailing characters: %", remainder);
-		return result, false;
+		return false, result;
 	}
 
-	return result, true;
+	return true, result;
 }
 
 // For debug purposes
@@ -102,16 +103,50 @@ print_val :: (using val: JSON_Value) {
 
 json_value :: (str: string) -> JSON_Value {
 	val: JSON_Value;
-	val.type = JSON_Type.STRING;
+	val.type =.STRING;
 	val.str = str;
 	return val;
 }
 
 json_value :: (obj: *JSON_Object) -> JSON_Value {
 	val: JSON_Value;
-	val.type = JSON_Type.OBJECT;
+	val.type =.OBJECT;
 	val.object = obj;
 	return val;
+}
+
+json_set_null :: (val: *JSON_Value) {
+	val.type = .NULL;
+}
+
+json_set :: (val: *JSON_Value, value: bool) {
+	val.type = .BOOLEAN;
+	val.boolean = value;
+}
+
+json_set :: (val: *JSON_Value, value: int) {
+	val.type = .NUMBER;
+	val.number = cast(float64) value;
+}
+
+json_set :: (val: *JSON_Value, value: float64) {
+	val.type = .NUMBER;
+	val.number = value;
+}
+
+json_set :: (val: *JSON_Value, value: string) {
+	val.type = .STRING;
+	val.str = value;
+}
+
+json_set :: (val: *JSON_Value, value: [] JSON_Value) {
+	val.type = .ARRAY;
+	val.array = value;
+}
+
+json_set :: (val: *JSON_Value, value: *JSON_Object) {
+	val.type = .OBJECT;
+	val.object = value;
 }
 
 json_write_json_value :: (builder: *String_Builder, using val: JSON_Value, indent_char := "\t", level := 0) {
@@ -156,7 +191,7 @@ json_write_json_value :: (builder: *String_Builder, using val: JSON_Value, inden
 				}
 				json_append_escaped(builder, it);
 				append(builder, ": ");
-				v, found := table_find(<<obj, it);
+				v, found := table_find(obj, it);
 				assert(found, "Missing table value %", it);
 				json_write_json_value(builder, v, indent_char, level + 1);
 				if it_index != obj.count - 1	append(builder, ",");
@@ -170,8 +205,8 @@ json_write_json_value :: (builder: *String_Builder, using val: JSON_Value, inden
 }
 
 json_set :: (obj: *JSON_Object, path: string, val: JSON_Value) -> bool {
-	dotpos, found := index_of_char(path, #char ".");
-	if !found {
+	dotpos := find_index_from_left(path, #char ".");
+	if dotpos == -1 {
 		table_set(obj, path, val);
 		return true;
 	}
@@ -181,7 +216,7 @@ json_set :: (obj: *JSON_Object, path: string, val: JSON_Value) -> bool {
 	if !next.count		return false;
 	if !remainder.count	return false;
 
-	next_value, success := table_find(<<obj, next);
+	next_value, success := table_find(obj, next);
 	next_obj: *JSON_Object;
 	if success {
 		if next_value.type != JSON_Type.OBJECT	return false;
@@ -230,7 +265,7 @@ get_as :: (val: JSON_Value, $T: Type) -> T {
 	}();
 }
 
-#scope_file
+#scope_module
 
 parse_value :: (to_parse: string) -> JSON_Value, remainder: string, success: bool {
 	result: JSON_Value;
@@ -240,23 +275,23 @@ parse_value :: (to_parse: string) -> JSON_Value, remainder: string, success: boo
 		case #char "n";
 			remainder, success = expect_and_slice(remainder, "null");
 			if !success		return result, remainder, false;
+			json_set_null(*result);
 			result.type = JSON_Type.NULL;
 			return result, remainder, true;
 		case #char "t";
 			remainder, success = expect_and_slice(remainder, "true");
 			if !success		return result, remainder, false;
-			result.type = JSON_Type.BOOLEAN;
-			result.boolean = true;
+			json_set(*result, true);
 			return result, remainder, true;
 		case #char "f";
 			remainder, success = expect_and_slice(remainder, "false");
 			if !success		return result, remainder, false;
-			result.type = JSON_Type.BOOLEAN;
+			json_set(*result, false);
 			return result, remainder, true;
 		case #char "\"";
 			str: string;
 			str, remainder, success = parse_string(remainder);
-			result = json_value(str);
+			json_set(*result, str);
 		case #char "[";
 			result.type = JSON_Type.ARRAY;
 			result.array, remainder, success = parse_array(remainder);
@@ -321,7 +356,7 @@ parse_object :: (str: string) -> result: JSON_Object, remainder: string, success
 		key, remainder, success = parse_string(remainder);
 		if !success	return result, remainder, false;
 
-		existing := table_find_pointer(result, key);
+		existing := table_find_pointer(*result, key);
 		if existing		return result, remainder, false;
 
 		remainder = trim_left(remainder, WHITESPACE_CHARS);
@@ -344,83 +379,7 @@ parse_object :: (str: string) -> result: JSON_Object, remainder: string, success
 	return result, remainder, true;
 }
 
-parse_string :: (str: string) -> result: string, remainder: string, success: bool {
-	assert(str[0] == #char "\"", "Invalid string start %", str);
-	inside := advance(str);
-	needsUnescape := false;
-	while inside[0] != #char "\"" {
-		if inside.count < 2 	return "", str, false;
-		if inside[0] == #char "\\" {
-			needsUnescape = true;
-			if inside.count < 2	return "", str, false;
-			advance(*inside);
-		}
-		advance(*inside);
-	}
 
-	length := inside.data - str.data - 1;
-	result := slice(str, 1, length);
-	if needsUnescape {
-		success: bool;
-		result, success = unescape(result);
-		if !success		return "", str, false;
-	} else {
-		result = copy_string(result);
-	}
-
-	remainder := slice(str, length + 2, str.count - length - 2);
-	return result, remainder, true;
-}
-
-unescape :: (str: string) -> result: string, success: bool {
-	result := alloc_string(str.count);
-	rc := 0;
-	for i: 0..str.count-1 {
-		if str[i] != #char "\\" {
-			// Check for invalid characters for JSON
-			if str[i] < 0x20	return "", false;
-
-			result[rc] = str[i];
-			rc += 1;
-		} else {
-			if i == str.count - 1	return "", false;
-			i += 1;
-			if str[i] == {
-				case #char "\""; #through;
-				case #char "/"; #through;
-				case #char "\\";
-					result[rc] = str[i];
-					rc += 1;
-				case #char "b";
-					result[rc] = 0x08;
-					rc += 1;
-				case #char "f";
-					result[rc] = 0x0c;
-					rc += 1;
-				case #char "n";
-					result[rc] = #char "\n";
-					rc += 1;
-				case #char "r";
-					result[rc] = #char "\r";
-					rc += 1;
-				case #char "t";
-					result[rc] = #char "\t";
-					rc += 1;
-				case #char "u";
-					if i + 4 >= str.count	return "", false;
-					unicode_char, success := parse_unicode(slice(str, i + 1, 4));
-					if !success		return "", false;
-					utf8_len := encode_utf8(unicode_char, *(result.data[rc]));
-					rc += utf8_len;
-					i += 4;
-				case;
-					return "", false;
-			}
-		}
-	}
-	result.count = rc;
-	return result, true;
-}
 
 #import "Compiler";
-#import,dir "unicode_utils";
+#import "unicode_utils";
