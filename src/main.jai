@@ -43,7 +43,7 @@ main :: () {
   );
   set_window_pos_to_mouse(hwnd);
   show_window(false);
-  if config.on_startup_open then show_window(true); // just to trigger streamer_mode stuff
+  if config.on_startup_open then show_window(true); // need to call show_window even if it was already visible, to trigger streamer_mode stuff
 
   // register our global show hide hotkey
   RegisterHotKey(hwnd, 0, xx config.hotkey_mod, xx config.hotkey_key);
@@ -73,7 +73,6 @@ main :: () {
   }
 }
 
-// todo: need a tutorial that expains the basics if you were to just run the exe
 // todo: need a way to edit settings / hotkey / remember password
 // todo: ability to resize the window
 // todo: sort by size? so you can manually remove the big stuff to cleanup
