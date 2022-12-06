@@ -76,10 +76,10 @@ free :: (res: *sqlite3_stmt) {sqlite3_finalize(res); }
 for_expansion :: (res: *sqlite3_stmt, body: Code, flags: For_Flags) #expand {
   `it_index := 0;
   `it := res;
+  defer free(res);
   while sqlite3_step(res) == SQLITE_ROW { defer `it_index += 1;
     #insert body;
   }
-  free(res);
 }
 
 
