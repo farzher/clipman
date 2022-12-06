@@ -1,7 +1,9 @@
 #import "sqlite3";
 #import "mybasic";
 
-#module_parameters(id: string = ""); // so we can load multiple db at the same time
+// if you need to open multiple db at the same time, use this module param
+// to load a separate instane of this module, which will have a separate db.
+#module_parameters(id: string = "");
 
 db: *sqlite3db;
 
@@ -11,9 +13,8 @@ open :: (filename: *u8) -> err: bool {
   if err then mylog("open error:", to_string(sqlite3_errmsg(db)));
   return err;
 }
-close :: () {
-  sqlite3_close(db);
-}
+close :: () {sqlite3_close(db); }
+
 key :: (password: string) {sqlite3_key(db, password.data, xx password.count); }
 rekey :: (password: string) {sqlite3_rekey(db, password.data, xx password.count); }
 
@@ -60,10 +61,10 @@ query :: (sql: *u8, binds: .. Any) -> bool {
 
 
 
-set_str :: (res: *sqlite3_stmt, i: int, str: string) {sqlite3_bind_text(res, xx i, to_c_string(str, tallocator), xx str.count, null); }
-set_int :: (res: *sqlite3_stmt, i: int, v: int) {sqlite3_bind_int64(res, xx i, v); }
-get_int :: (res: *sqlite3_stmt, coli: int) -> int {return sqlite3_column_int64(res, xx coli); }
-get_txt :: (res: *sqlite3_stmt, coli: int) -> string {return alloc_string(to_string(sqlite3_column_text(res, xx coli))); }
+set_str :: (res: *sqlite3_stmt, i: int, str: string) { sqlite3_bind_text(res, xx i, to_c_string(str, tallocator), xx str.count, null); }
+set_int :: (res: *sqlite3_stmt, i: int, v: int)      { sqlite3_bind_int64(res, xx i, v); }
+get_int :: (res: *sqlite3_stmt, coli: int) -> int    { return sqlite3_column_int64(res, xx coli); }
+get_txt :: (res: *sqlite3_stmt, coli: int) -> string { return alloc_string(to_string(sqlite3_column_text(res, xx coli))); }
 get_str :: (res: *sqlite3_stmt, coli: int) -> string {
   str := alloc_string(sqlite3_column_bytes(res, xx coli));
   memcpy(str.data, sqlite3_column_blob(res, xx coli), str.count);
