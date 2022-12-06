@@ -318,7 +318,6 @@ update :: () {
                   SQL, config.on_startup_delete_clips_bigger_than);
                 }
                 db.query("VACUUM"); // this is slow
-                // this vacuum doesn't work. don't understand why: cannot VACUUM - SQL statements in progress
 
               case "Encrypt";
                 if is_db_locked break; // db cannot be encrypted because it's currently locked
