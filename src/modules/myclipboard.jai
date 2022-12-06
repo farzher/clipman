@@ -2,7 +2,7 @@ using #import "Clipboard";
 
 #if OS == .WINDOWS {
 
-    #import "mywindows";
+    #import,file "mywindows.jai";
     #import "Basic";  // For alloc.
 
     os_clipboard_get_file :: (hwnd: HWND) -> [..]string {

@@ -1,4 +1,4 @@
-#import "mywindows";
+#import,file "../mywindows.jai";
 #import "Windows_Utf8";
 
 

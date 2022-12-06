@@ -198,6 +198,6 @@ unescape :: (str: string) -> result: string, success: bool {
 #import "String";
 
 #import "Hash_Table";
-#import "unicode_utils";
+#import,dir "unicode_utils";
 #import "IntroSort";
 

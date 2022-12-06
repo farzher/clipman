@@ -2786,13 +2786,13 @@ for_expansion :: (splitter: *Split_By_Line, body: Code, flags: For_Flags) #expan
 }
 
 
-my_copy_string :: (s: string, allocator: Allocator) -> string {
-    if !s.count return "";
+// copy_string :: (s: string, allocator: Allocator) -> string {
+//     if !s.count return "";
 
-    copy := alloc_string(s.count, allocator);
-    memcpy(copy.data, s.data, s.count);
-    return copy;
-}
+//     copy := alloc_string(s.count, allocator);
+//     memcpy(copy.data, s.data, s.count);
+//     return copy;
+// }
 
 
 Chars :: struct {

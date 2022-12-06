@@ -212,7 +212,7 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
 
 
 TextureCache: struct {
-  #import "my_lru_cache";
+  #import,file "modules/my_lru_cache.jai";
 
   texture_cache: LRU(int, Simp.Texture, MAX_RECORDS, FREE_PROC=texture_free);
 

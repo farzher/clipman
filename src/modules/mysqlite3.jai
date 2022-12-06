@@ -1,5 +1,5 @@
-#import "sqlite3";
-#import "mybasic";
+#import,dir "sqlite3";
+#import,file "mybasic.jai";
 
 // if you need to open multiple db at the same time, use this module param
 // to load a separate instane of this module, which will have a separate db.

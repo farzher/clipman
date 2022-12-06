@@ -423,4 +423,4 @@ unescape :: (str: string) -> result: string, success: bool {
 }
 
 #import "Compiler";
-#import "unicode_utils";
+#import,dir "unicode_utils";

@@ -8,7 +8,7 @@
 
 #import "Basic";
 #import "Unicode";
-using shared :: #import "Strings_Shared";
+using shared :: #import,dir "../Strings_Shared";
 
 
 

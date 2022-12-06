@@ -1,7 +1,7 @@
 // All functions return a string view and/or mutate a string view in-place
 
 #import "Basic";
-using shared :: #import "Strings_Shared";
+using shared :: #import,dir "../Strings_Shared";
 
 
 #scope_file

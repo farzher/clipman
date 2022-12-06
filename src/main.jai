@@ -841,7 +841,7 @@ import_from_ditto_db :: (ditto_filepath: string) {
 
   mylog("starting ditto import");
 
-  ditto :: #import "mysqlite3"(id="ditto");
+  ditto :: #import,file "modules/mysqlite3.jai"(id="ditto");
 
   #import "File_Utilities";
   if !file_exists(ditto_filepath) {
@@ -895,7 +895,7 @@ import_from_ditto_db :: (ditto_filepath: string) {
 
 
 
-#import "json";
+#import,dir "modules/json";
 #import "File";
 config_load :: () {
   file_data, file_success := read_entire_file(CONFIG_PATH);
@@ -929,27 +929,28 @@ DbRecord :: struct {id: int; preview: string; first_seen_at: int; last_seen_at: 
 MAX_LINE_LEN  :: 200; // only for rendering performance
 MAX_LINE_COUNT:: 60;  // only for rendering performance
 
-#import "mybasic";
-#import "mywindows";
-#import "myclipboard";
+#import,file "modules/mybasic.jai";
+#import,file "modules/mywindows.jai";
+#import,file "modules/myclipboard.jai";
 
-db :: #import "mysqlite3";
+db :: #import,file "modules/mysqlite3.jai";
 for_expansion :: db.for_expansion; // this is gross
 
-COLORS :: #import "colors";
+COLORS :: #import,dir "modules/colors";
 
 #import "Math";
 
 Simp :: #import "Simp";
 
-#import "Input";
-#import "Window_Creation";
+// #import,dir "modules/Input";
+#import "Input"; // we need to use this normal style of import so we import the same Input as getrect
+#import,dir "modules/Window_Creation";
 #import "Windows_Utf8";
 
 // #import "String";
-Strings :: #import "Strings";
+Strings :: #import,dir "modules/Strings";
 for_expansion :: Strings.for_expansion; // this is gross
-strings_alloc :: #import "Strings_Alloc";
+strings_alloc :: #import,dir "modules/Strings_Alloc";
 
 to_c_string :: (s: string, allocator: Allocator = .{}) -> *u8 {
   result : *u8 = alloc(s.count + 1, allocator);
