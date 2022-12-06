@@ -231,8 +231,11 @@ interp :: (_str: string) -> string #expand {
 
 
 
-
-
+set_cwd_to_exe_location :: () {
+  system :: #import "System";
+  String :: #import "String";
+  set_working_directory(String.path_strip_filename(system.get_path_of_running_executable()));
+}
 
 
 

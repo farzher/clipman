@@ -28,7 +28,9 @@ hwnd    : HWND;
 
 
 main :: () {
-  set_working_directory("./bin"); // set cwd
+
+  set_cwd_to_exe_location(); // ensures we read are write files next to the exe, whereever it is
+
   config_load(); // load the config first
 
   // create the main window
