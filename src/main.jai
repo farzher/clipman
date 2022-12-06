@@ -814,12 +814,9 @@ insert_into_db :: (_str: string, copy_type: COPY_TYPE = .TEXT) {
 
     #import "Hash";
     hash : int = sdbm_hash(str.data, str.count);
-    mylog("insert_into_db .BITMAP", hash);
-    for db.select("select id from copy where type=? and preview_hash=? and preview=? limit 1", cast(int)copy_type, hash, str)
-      existing_record_id = db.get_int(it, 0);
+    existing_record_id = db.select_int("select id from copy where type=? and preview_hash=? and preview=? limit 1", cast(int)copy_type, hash, str);
   } else {
-    for db.select("select id from copy where type=? and preview=? limit 1", cast(int)copy_type, str)
-      existing_record_id = db.get_int(it, 0);
+    existing_record_id = db.select_int("select id from copy where type=? and preview=? limit 1", cast(int)copy_type, str);
   }
 
   if existing_record_id {
@@ -875,9 +872,7 @@ import_from_ditto_db :: (ditto_filepath: string) {
   }
 
   tmp_insert_into_db :: (str: string, first_seen_at: int, last_seen_at: int, copy_type: COPY_TYPE = .TEXT) -> success: bool {
-    exists_id: int;
-    for db.select("select id from copy where preview = ? and type=? limit 1", str, cast(int)copy_type)
-      exists_id = db.get_int(it, 0);
+    exists_id: int = db.select_int("select id from copy where preview = ? and type=? limit 1", str, cast(int)copy_type);
 
     if exists_id return false;
 
