@@ -1,4 +1,5 @@
-#load "functions.jai";
+#load "stuff.jai";
+#import,file "functions.jai";
 
 APP_NAME      :: "ClipMan";
 VERSION       :: "v0.0.0";
@@ -22,6 +23,7 @@ config: struct {
 }
 
 // these values are calculated based on the config data
+// (this actual window_height may not be exactly config.window_height)
 window_width  : int; // defined by config_load
 window_height : int; // defined by config_load
 max_records   : int; // defined by config_load
@@ -370,7 +372,7 @@ update :: () {
 
 render :: () {
   #if true { // weird hover feature
-    mouse := Mouse.pos();
+    mouse := Mouse.pos(hwnd);
     is_mouse_in_window := !(mouse.x < 0 || mouse.x > window_width || mouse.y < 0 || mouse.y > window_height);
     is_mouse_in_right_half := is_mouse_in_window && mouse.x >= window_width/4;
     hover_index: int = ifx is_mouse_in_right_half then mouse.y/config.record_height else -1;
@@ -626,7 +628,7 @@ update_records :: () {
 do_click :: () {
   if is_streamer_mode {is_streamer_mode = false; return; }
 
-  mouse := Mouse.pos();
+  mouse := Mouse.pos(hwnd);
   new_selected_index := mouse.y/config.record_height;
   if new_selected_index != selected_index {
     selected_index = new_selected_index;
@@ -638,7 +640,7 @@ do_click :: () {
 do_rightclick :: () #expand {
   if is_streamer_mode {is_streamer_mode = false; return; }
 
-  mouse := Mouse.pos();
+  mouse := Mouse.pos(hwnd);
 
   selection := popup_menu(.["Delete", "Context", "Save To Downloads"]);
   if selection == {

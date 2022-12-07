@@ -244,6 +244,12 @@ to_c_string :: (s: string, allocator: Allocator = .{}) -> *u8 {
   return result;
 }
 
+embed_file :: (file_path: string) -> []u8 {
+  Compiler :: #import "Compiler";
+  File     :: #import "File";
+  return Compiler.add_global_data(xx File.read_entire_file(file_path), .READ_ONLY);
+}
+
 
 
 
