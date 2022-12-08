@@ -602,9 +602,9 @@ update_records :: () {
     // todo split search into multiples on space
     // map(split(search_string), "preview like '%'||?||'%'"
     // join(, " AND ")
-    rows = db.select(to_c_string(interp("select id, preview, last_seen_at, first_seen_at, count, type from copy where type=? and preview like '%'||?||'%' ORDER BY %{`order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
+    rows = db.select(to_c_string(interp("select id, preview, last_seen_at, first_seen_at, count, type from copy where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
   } else {
-    rows = db.select(to_c_string(interp("select id, preview, last_seen_at, first_seen_at, count, type from copy ORDER BY %{`order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
+    rows = db.select(to_c_string(interp("select id, preview, last_seen_at, first_seen_at, count, type from copy ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
   }
 
   for row: rows {
