@@ -143,20 +143,29 @@ getutcms :: () -> u64 {
 
 
 // string interpolation.
-// example: interp("hello %{name}") will compile to tprint("hello %", name)
-// argument is a Code instead of string because we need some way to get a
-// Code of the caller's scope to #insert,scope(code) into it
-// this seems a bit weird? but works
-interp :: (code: Code) -> string #expand {
-  #insert,scope(code) -> string {
+// example: tprinti("hello %{name}") compiles to tprint("hello %", name)
+// perf: is calling append for every single character slow?
+sprinti :: #bake_arguments _(allocator = .{});
+tprinti :: #bake_arguments _(allocator = temp);
+_       :: string_interpolation;
+string_interpolation  :: ($_str: string, allocator: Allocator = temp, caller_scope := #caller_code) -> string #expand {
+  a := ifx allocator.proc then allocator else context.allocator;
+  push_allocator(a); // sprint doesn't accept an allocator, so we have to push_allocator to the context
+
+  #insert,scope(caller_scope) -> string {
+
     String :: #import "String";
 
-    str := String.replace(#insert code, "\n", "\\n");
+    str := _str; // to make str not constant
+    // when using #string you can have newlines in your string
+    // we need to rewrite these actual newlines to \n because our string to sprint can't have real newline in it
+    str = String.replace(str, "\n", "\\n");
+    // all " need to be escaped
+    str = String.replace(str, "\"", "\\\"");
 
+    // loop through str char by char, building the format_str and arguments
     format_str: String_Builder;
-    arguments: [..] string;
-
-    // loop through str char by char, translating it into a format_str
+    arguments : [..] string;
     for i: 0 .. str.count-1 {
 
       is_start_of_interpolated_code := (str[i] == #char"#" || str[i] == #char"%" || str[i] == #char"$") && (i+1 < str.count-1 && str[i+1] == #char"{");
@@ -173,16 +182,22 @@ interp :: (code: Code) -> string #expand {
         continue;
       }
 
-      // we have a block of interpolated code. write % to the format_str and push the code into arguments
-      if is_start_of_interpolated_code i += 2;
+      // we have a block of interpolated code. write %0 to the format_str and push the code into arguments
       if is_start_of_interpolated_code {
-        closing_brace_index := String.find_index_from_left(str, "}", i+1);
+        append(*format_str, "%0");
+        i += 2;
+
+        closing_brace_index := -1;
+        j := i; while j < str.count { defer j += 1;
+          // if we're in a string, skip to the end without checking for } inside the string ex %{'{}{}{}'}
+          if str[j] == #char"'" j = String.find_index_from_left(str, "'", j+1); // this can return -1, should probably assert on this
+          if str[j] == #char"}" {closing_brace_index = j; break; }
+        }
         assert(closing_brace_index != -1);
 
         arg := String.slice(str, i, closing_brace_index - i);
+        arg = String.replace(arg, "'", "\""); // rewrite ' to " ex "Mode: %{ifx SOA 'SOA' else 'AOS'}"
         array_add(*arguments, arg);
-
-        append(*format_str, tprint("%%%", arguments.count));
 
         i = xx closing_brace_index;
         continue;
@@ -192,11 +207,14 @@ interp :: (code: Code) -> string #expand {
     arguments_string := "";
     if arguments.count {
       builder: String_Builder;
-      for arguments append(*builder, tprint(", %", it));
+      for arguments {
+        append(*builder, ", ");
+        append(*builder, it);
+      }
       arguments_string = builder_to_string(*builder);
     }
 
-    return tprint("return tprint(\"%\"%);", builder_to_string(*format_str), arguments_string);
+    return tprint("return sprint(\"%\"%);", builder_to_string(*format_str), arguments_string);
   }
 }
 

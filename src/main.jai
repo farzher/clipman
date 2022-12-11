@@ -41,7 +41,7 @@ main :: () {
 
   // create the main window
   hwnd = create_window(
-    window_name=#run tprint("% %", APP_NAME, VERSION),
+    window_name=#run _("%{APP_NAME} %{VERSION}"),
     width=window_width, height=window_height,
     background_color_rgb=COLORS.to_3f(COLORS.DARK),
     style=WS_POPUP,
@@ -64,7 +64,7 @@ main :: () {
   init_everything();
 
   // create tray icon
-  trayicon_create(tooltip=#run tprint("% %", APP_NAME, VERSION));
+  trayicon_create(tooltip=#run _("%{APP_NAME} %{VERSION}"));
 
   // main game loop
   while 1 {
@@ -178,15 +178,14 @@ init_db :: (key: string = "") {
   total_copy_count = db.select_int("select count(1) from copy");
 
   if !is_db_locked && total_copy_count==0 {
-    tutorial_copy := #string STR
-      % % by farzher
+    insert_into_db(#run _(#string STR
+      %{APP_NAME} %{VERSION} by farzher
       Alt + ` (backtick/tilde ~) to toggle
       Hover over the right half of this clip to expand it
 
       This is a clipboard manager that keeps a history of everything you copy
       Report any bugs to papa@papajohns.com
-    STR;
-    insert_into_db(tprint(tutorial_copy, APP_NAME, VERSION));
+    STR));
   }
 }
 
@@ -487,7 +486,7 @@ render :: () {
   render_errors();
   render_errors :: () #expand {
     if is_config_parse_error {
-      for line, line_i: string.["CONFIG IS CORRUPT", #run tprint("Fix or delete your % file", CONFIG_PATH)] {
+      for line, line_i: string.["CONFIG IS CORRUPT", #run _("Fix or delete your %{CONFIG_PATH} file")] {
         text_width := Simp.prepare_text(my_font, line);
         Simp.draw_prepared_text(my_font, (window_width-text_width)/2, window_height - (my_font.character_height*(2+line_i)), COLORS.TEXT);
       }
@@ -602,9 +601,9 @@ update_records :: () {
     // todo split search into multiples on space
     // map(split(search_string), "preview like '%'||?||'%'"
     // join(, " AND ")
-    rows = db.select(to_c_string(interp("select id, preview, last_seen_at, first_seen_at, count, type from copy where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
+    rows = db.select(to_c_string(_("select id, preview, last_seen_at, first_seen_at, count, type from copy where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
   } else {
-    rows = db.select(to_c_string(interp("select id, preview, last_seen_at, first_seen_at, count, type from copy ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
+    rows = db.select(to_c_string(_("select id, preview, last_seen_at, first_seen_at, count, type from copy ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
   }
 
   for row: rows {
