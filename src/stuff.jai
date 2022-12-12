@@ -32,11 +32,11 @@ TextureCache: struct {
 
     // imgur records require different processing than normal bitmap records
     if is_imgur {
-      Global(#code imgurcache: Table(string, string)); // this is a memory leak
+      Global(#code imgurcache: Table(string, string)); // todo: this is a memory leak
 
       bytes := imgurcache[record.preview];
       if !bytes {
-        response := request(record.preview); // todo make this request async
+        response := request(record.preview); // todo: make this request async
         if !response then response = "0";
         imgurcache[record.preview] = response;
         bytes = response;
@@ -70,8 +70,17 @@ TextureCache: struct {
 
 
 is_imgur_url :: (str: string) -> bool {
-  return Strings.starts_with(str, "https://i.imgur.com/")
-      || Strings.starts_with(str, "http://i.imgur.com/");
+
+  starts_correctly := Strings.starts_with(str, "https://i.imgur.com/")
+                   || Strings.starts_with(str, "http://i.imgur.com/");
+  if !starts_correctly return false;
+
+  ends_correctly := Strings.ends_with(str, ".png")
+                 || Strings.ends_with(str, ".jpg")
+                 || Strings.ends_with(str, ".jpeg");
+  if !ends_correctly return false;
+
+  return true;
 }
 
 
