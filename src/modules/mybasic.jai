@@ -74,7 +74,7 @@ mapnumber :: (value: float, from1: float, from2: float, to1: float, to2:float, e
 
   if clamp {
     if ratio > 1 then ratio = 1;
-    else if ratio < -1 then ratio = -1;
+    else if ratio < 0 then ratio = 0;
   }
 
   return bdist*ratio + to1;
@@ -138,6 +138,7 @@ getutcms :: () -> u64 {
   utc: *u64 = xx *filetime;
   return <<utc / WINDOWS_TICK - SEC_TO_UNIX_EPOCH;
 }
+
 
 
 
@@ -236,9 +237,33 @@ to_c_string :: (s: string, allocator: Allocator = .{}) -> *u8 {
 }
 
 embed_file :: (file_path: string) -> []u8 {
+  File :: #import "File";
+  return xx File.read_entire_file(file_path);
+}
+
+Global :: (code: Code) #expand {
   Compiler :: #import "Compiler";
-  File     :: #import "File";
-  return Compiler.add_global_data(xx File.read_entire_file(file_path), .READ_ONLY);
+  #run Compiler.add_build_string(tprint("%;", code2string(code)));
+}
+
+code2string :: (code: Code) -> string #expand {
+  PP       :: #import "Program_Print";
+  Compiler :: #import "Compiler";
+  code_node := Compiler.compiler_get_nodes(code);
+  builder: String_Builder;
+  PP.print_expression(*builder, code_node);
+  return builder_to_string(*builder, allocator=temp);
+}
+
+
+using #import "Hash_Table";
+operator [] :: (t: Table(string, string), index: string) -> string {
+  result, found := table_find(*t, index);
+  if !found return "";
+  return result;
+}
+operator []= :: (t: *Table(string, string), index: string, value: string) {;
+  table_add(t, index, value);
 }
 
 
@@ -246,8 +271,8 @@ embed_file :: (file_path: string) -> []u8 {
 
 
 
-#scope_file
 #if OS == .WINDOWS {
+  #scope_file
   #import "Windows";
   kernel32 :: #foreign_system_library "kernel32";
   stdinhandle: HANDLE;
@@ -273,6 +298,7 @@ embed_file :: (file_path: string) -> []u8 {
   }
 }
 #if OS == .LINUX {
+  #scope_file
   #import "POSIX";
   #scope_export
   stdin :: (allocator: Allocator = .{}) -> string {
@@ -287,4 +313,52 @@ embed_file :: (file_path: string) -> []u8 {
     memcpy(result.data, temp.data, bytes_read);
     return result;
   }
+}
+
+
+#import "Curl";
+// Allocates response_body using context.allocator
+request :: (url: string, data := "", method := "", headers := string.[], include_headers := false, follow_redirects := true) -> response_body: string, response_code: int, curl_code: CURLcode {
+    curl := curl_easy_init();
+    assert(curl != null);
+    defer curl_easy_cleanup(curl);
+
+    curl_easy_setopt(curl, .URL, temp_c_string(url));
+
+    if method                              curl_easy_setopt(curl, .CUSTOMREQUEST, temp_c_string(method));
+    if data || (method && method != "GET") curl_easy_setopt(curl, .POSTFIELDS, temp_c_string(data));
+    if include_headers                     curl_easy_setopt(curl, .HEADER, 1); // simply prepends headers to body
+    if method == "HEAD"                    curl_easy_setopt(curl, .NOBODY, 1);
+    if follow_redirects                    curl_easy_setopt(curl, .FOLLOWLOCATION, 1);
+
+    if headers.count {
+        slist: *curl_slist;
+        for headers  slist = curl_slist_append(slist, temp_c_string(it));
+        curl_easy_setopt(curl, .HTTPHEADER, slist);
+    }
+
+    builder: String_Builder;
+    defer free_buffers(*builder);
+    curl_easy_setopt(curl, .WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, .WRITEDATA,     *builder);
+
+    // actually execute the request. this is blocking
+    curl_code: CURLcode = curl_easy_perform(curl);
+
+    response_code: int;
+    if curl_code == .OK  curl_easy_getinfo(curl, .RESPONSE_CODE, *response_code);
+
+    response_body: string = builder_to_string(*builder);
+
+    return response_body, response_code, curl_code;
+
+    size_t :: u64;
+    write_callback :: (ptr: *u8, size: size_t, nmemb: size_t, userdata: *void) -> size_t #c_call {
+        builder := cast(*String_Builder)userdata;
+        jai_context: Context;
+        push_context jai_context {
+            append(builder, ptr, xx nmemb);
+        }
+        return nmemb;
+    }
 }

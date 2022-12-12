@@ -419,9 +419,10 @@ render :: () {
 
     if !is_streamer_mode then render_lines_of_text();
     render_lines_of_text :: () #expand {
-      if record.type == .BITMAP {
+      if record.type == .BITMAP || (hover_index == i && is_imgur_url(record.preview)) {
 
         texture := TextureCache.get_texture_for_record(record);
+        if !texture return;
 
         ratio := min(cast(float)window_width/texture.width, cast(float)config.record_height/texture.height);
         if hover_index == i then ratio = min(cast(float)window_width/texture.width, cast(float)(window_height - i*config.record_height)/texture.height);

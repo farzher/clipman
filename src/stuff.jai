@@ -21,10 +21,34 @@ TextureCache: struct {
   }
 
   get_texture_for_record :: (record: DbRecord) -> *Simp.Texture {
-    if record.type != .BITMAP then return null;
+    is_imgur := is_imgur_url(record.preview);
 
+    // guard against non-image records
+    if record.type != .BITMAP && !is_imgur then return null;
+
+    // if the texture is already in the cache return it
     textureptr := find_pointer(TextureCache.texture_cache, record.id);
     if textureptr then return textureptr;
+
+    // imgur records require different processing than normal bitmap records
+    if is_imgur {
+      Global(#code imgurcache: Table(string, string)); // this is a memory leak
+
+      bytes := imgurcache[record.preview];
+      if !bytes {
+        response := request(record.preview); // todo make this request async
+        if !response then response = "0";
+        imgurcache[record.preview] = response;
+        bytes = response;
+      }
+
+      // something went wrong when fetching the image
+      if bytes.count <= 1 return null;
+
+      texture: Simp.Texture;
+      Simp.texture_load_from_memory(*texture, xx bytes);
+      return add(*TextureCache.texture_cache, record.id, texture);
+    }
 
     texture: Simp.Texture;
     bitmap: Simp.Bitmap;
@@ -44,6 +68,11 @@ TextureCache: struct {
   }
 }
 
+
+is_imgur_url :: (str: string) -> bool {
+  return Strings.starts_with(str, "https://i.imgur.com/")
+      || Strings.starts_with(str, "http://i.imgur.com/");
+}
 
 
 
