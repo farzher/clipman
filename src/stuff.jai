@@ -32,21 +32,13 @@ TextureCache: struct {
 
     // imgur records require different processing than normal bitmap records
     if is_imgur {
-      Global(#code imgurcache: Table(string, string)); // todo: this is a memory leak
 
-      bytes := imgurcache[record.preview];
-      if !bytes {
-        response := request(record.preview); // todo: make this request async
-        if !response then response = "0";
-        imgurcache[record.preview] = response;
-        bytes = response;
-      }
-
-      // something went wrong when fetching the image
-      if bytes.count <= 1 return null;
+      response := request(record.preview);
+      defer free(response);
+      if !response return null;
 
       texture: Simp.Texture;
-      Simp.texture_load_from_memory(*texture, xx bytes);
+      Simp.texture_load_from_memory(*texture, xx response);
       return add(*TextureCache.texture_cache, record.id, texture);
     }
 

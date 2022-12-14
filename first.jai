@@ -19,7 +19,7 @@ build :: () {
 
   // seperate build options for debug vs release
   build_options((options: *Build_Options) {
-    build_set_import_dir(options, import_dir);
+    build_add_import_dir(options, import_dir);
     options.output_executable_name = exe_name;
 
     #if !RELEASE then options.output_path = "bin/";
@@ -99,7 +99,7 @@ build_options :: (fn: (*Build_Options)) {
   fn(*options);
   set_build_options(options, w);
 }
-build_set_import_dir :: (options: *Build_Options, dir: string) {
+build_add_import_dir :: (options: *Build_Options, dir: string) {
   import_path: [..] string;
   array_add(*import_path, dir);
   array_add(*import_path, ..options.import_path);
