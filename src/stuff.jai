@@ -73,6 +73,8 @@ is_imgur_url :: (str: string) -> bool {
   // https://i.imgur.com/IMGID.png
   // http://i.imgur.com/IMGID.jpg
 
+  if obviously_not_a_url(str) return false;
+
   starts_correctly := Strings.starts_with(str, "https://i.imgur.com/")
                    || Strings.starts_with(str, "http://i.imgur.com/");
   if !starts_correctly return false;
@@ -89,6 +91,8 @@ is_youtube_url :: (str: string) -> bool {
   // https://www.youtube.com/watch?v=VIDEOID
   // https://youtu.be/VIDEOID?t=7967
 
+  if obviously_not_a_url(str) return false;
+
   starts_correctly := Strings.starts_with(str, "https://youtube.com/watch?v=")
                    || Strings.starts_with(str, "https://www.youtube.com/watch?v=")
                    || Strings.starts_with(str, "https://youtu.be/")
@@ -96,6 +100,12 @@ is_youtube_url :: (str: string) -> bool {
   if !starts_correctly return false;
 
   return true;
+}
+
+obviously_not_a_url :: (str: string) -> bool {
+  if str.count > 10_000 return true;
+  if Strings.contains(str, "\n") return true;
+  return false;
 }
 
 youtube_videoid_from_url :: (str: string) -> string {
