@@ -113,22 +113,25 @@ youtube_videoid_from_url :: (str: string) -> string {
 
   videoid: string;
 
-  videoid = ghetto_regex_capture_from_until(str, "youtube.com/watch?v=", "&");
+  videoid = ghetto_regex_capture(str, "youtube.com/watch?v=", is_alnum);
   if videoid return videoid;
 
-  videoid = ghetto_regex_capture_from_until(str, "youtu.be/", "?");
+  videoid = ghetto_regex_capture(str, "youtu.be/", is_alnum);
   if videoid return videoid;
 
   return videoid;
 }
 
-ghetto_regex_capture_from_until :: (str: string, begin: string, end: string) -> string {
+ghetto_regex_capture :: (str: string, begin: string, is_matching_fn: (u8)->bool) -> string {
   index := Strings.first_index(str, begin);
   if index == -1 return "";
   index += begin.count;
 
-  end_index := Strings.first_index(str, end, index);
-  if end_index == -1 end_index = str.count;
+  end_index: int = index;
+  while end_index < str.count { defer end_index += 1;
+    if !is_matching_fn(str[end_index]) { end_index -= 1; break; }
+  }
+  if !end_index return "";
 
   return Strings.substring(str, index, end_index - index);
 }
