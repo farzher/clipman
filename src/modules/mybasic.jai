@@ -5,7 +5,6 @@
 
 
 using #import "Basic";
-// #import "Basic"()(ENABLE_ASSERT=false);
 
 #import "String";
 mylog :: (args:..Any) {
@@ -315,10 +314,9 @@ operator []= :: (t: *Table(string, string), index: string, value: string) {;
   }
 }
 
-
 #import "Curl";
 // Allocates response_body using context.allocator
-request :: (url: string, data := "", method := "", headers := string.[], include_headers := false, follow_redirects := true) -> response_body: string, response_code: int, curl_code: CURLcode {
+request :: (url: string, data := "", method := "", headers := string.[], include_headers := false, follow_redirects := true, timeout_seconds := 0) -> response_body: string, response_code: int, curl_code: CURLcode {
     curl := curl_easy_init();
     assert(curl != null);
     defer curl_easy_cleanup(curl);
@@ -330,6 +328,7 @@ request :: (url: string, data := "", method := "", headers := string.[], include
     if include_headers                     curl_easy_setopt(curl, .HEADER, 1); // simply prepends headers to body
     if method == "HEAD"                    curl_easy_setopt(curl, .NOBODY, 1);
     if follow_redirects                    curl_easy_setopt(curl, .FOLLOWLOCATION, 1);
+    if timeout_seconds                     curl_easy_setopt(curl, .TIMEOUT, timeout_seconds);
 
     if headers.count {
         slist: *curl_slist;

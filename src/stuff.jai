@@ -7,6 +7,74 @@
 
 
 
+
+
+
+
+// for making curl requests in the background
+// you can spam call get(url), it will only make the request once
+// once it's ready you can use the response then free it
+// there may or may not be a memory leak here? seems to use a lot of memory
+request_q: struct {
+
+  get :: (url: string) -> Request {
+    ensure_init();
+
+    req := find_or_add(*request_q.request_cache, url);
+
+    if req.status == .NONE {
+      req.status = .FETCHING;
+      req.url = copy_string(url); // url may be tfree()
+      add_work(*request_q.thread_group, req, req.url);
+    }
+
+    return req;
+  }
+
+  free :: (req: Request) {
+    table_remove(*request_q.request_cache, req.url);
+    free(req.response.data);
+    free(req.url.data);
+  }
+
+  #import "Thread";
+
+  request_cache: Table(string, Request);
+  thread_group: Thread_Group;
+  inited := false;
+
+
+  Request :: struct {
+    url: string;
+    response: string;
+    status: enum {NONE; FETCHING; DONE;};
+    // status_code: u16;
+    ready :: (req: Request) -> bool { return req.status == .DONE; }
+  }
+
+  init :: () {
+    request_q.thread_group.name = "request_q.thread_group";
+    thread_count :: 12; // how many images we can load at the same time
+    init(*request_q.thread_group, thread_count, request_q.thread_do_work);
+    start(*request_q.thread_group);
+  }
+  ensure_init :: () {
+    if request_q.inited return;
+    request_q.inited = true;
+    request_q.init();
+  }
+
+  thread_do_work :: (group: *Thread_Group, thread: *Thread, work: *void) -> Thread_Continue_Status {
+    req := cast(*Request)work;
+
+    req.response = request(req.url, timeout_seconds=2);
+    req.status = .DONE;
+
+    return .CONTINUE;
+  }
+}
+
+
 TextureCache: struct {
   #import,file "modules/my_lru_cache.jai";
 
@@ -33,14 +101,13 @@ TextureCache: struct {
     // imgur records require different processing than normal bitmap records
     if can_fetch_img_from_record_text {
 
-      // todo: set a timeout on this request so it doesn't freeze forever
-      // todo: async await? request in background?
-      response := request(get_img_url_from_text(record.preview));
-      defer free(response);
-      if !response return null;
+      req := request_q.get(get_img_url_from_text(record.preview));
+      if !req.ready(req) return null;
+      if !req.response return null;
+      defer request_q.free(req);
 
       texture: Simp.Texture;
-      Simp.texture_load_from_memory(*texture, xx response);
+      Simp.texture_load_from_memory(*texture, xx req.response);
       return add(*TextureCache.texture_cache, record.id, texture);
     }
 
