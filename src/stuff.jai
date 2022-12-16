@@ -21,19 +21,21 @@ TextureCache: struct {
   }
 
   get_texture_for_record :: (record: DbRecord) -> *Simp.Texture {
-    is_imgur := is_imgur_url(record.preview);
+    can_fetch_img_from_record_text := can_fetch_img_from_text(record.preview);
 
     // guard against non-image records
-    if record.type != .BITMAP && !is_imgur then return null;
+    if record.type != .BITMAP && !can_fetch_img_from_record_text then return null;
 
     // if the texture is already in the cache return it
     textureptr := find_pointer(TextureCache.texture_cache, record.id);
     if textureptr then return textureptr;
 
     // imgur records require different processing than normal bitmap records
-    if is_imgur {
+    if can_fetch_img_from_record_text {
 
-      response := request(record.preview);
+      // todo: set a timeout on this request so it doesn't freeze forever
+      // todo: async await? request in background?
+      response := request(get_img_url_from_text(record.preview));
       defer free(response);
       if !response return null;
 
@@ -60,8 +62,16 @@ TextureCache: struct {
   }
 }
 
+can_fetch_img_from_text :: (str: string) -> bool { return is_imgur_url(str) || is_youtube_url(str); }
+get_img_url_from_text :: (str: string) -> string {
+  if is_imgur_url(str) return str;
+  if is_youtube_url(str) return _("https://img.youtube.com/vi/%{youtube_videoid_from_url(str)}/0.jpg");
+  return "";
+}
 
 is_imgur_url :: (str: string) -> bool {
+  // https://i.imgur.com/IMGID.png
+  // http://i.imgur.com/IMGID.jpg
 
   starts_correctly := Strings.starts_with(str, "https://i.imgur.com/")
                    || Strings.starts_with(str, "http://i.imgur.com/");
@@ -73,6 +83,44 @@ is_imgur_url :: (str: string) -> bool {
   if !ends_correctly return false;
 
   return true;
+}
+
+is_youtube_url :: (str: string) -> bool {
+  // https://www.youtube.com/watch?v=VIDEOID
+  // https://youtu.be/VIDEOID?t=7967
+
+  starts_correctly := Strings.starts_with(str, "https://youtube.com/watch?v=")
+                   || Strings.starts_with(str, "https://www.youtube.com/watch?v=")
+                   || Strings.starts_with(str, "https://youtu.be/")
+                   || Strings.starts_with(str, "https://www.youtu.be/");
+  if !starts_correctly return false;
+
+  return true;
+}
+
+youtube_videoid_from_url :: (str: string) -> string {
+  if !is_youtube_url(str) return "";
+
+  videoid: string;
+
+  videoid = ghetto_regex_capture_from_until(str, "youtube.com/watch?v=", "&");
+  if videoid return videoid;
+
+  videoid = ghetto_regex_capture_from_until(str, "youtu.be/", "?");
+  if videoid return videoid;
+
+  return videoid;
+}
+
+ghetto_regex_capture_from_until :: (str: string, begin: string, end: string) -> string {
+  index := Strings.first_index(str, begin);
+  if index == -1 return "";
+  index += begin.count;
+
+  end_index := Strings.first_index(str, end, index);
+  if end_index == -1 end_index = str.count;
+
+  return Strings.substring(str, index, end_index - index);
 }
 
 

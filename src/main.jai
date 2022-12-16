@@ -370,13 +370,16 @@ update :: () {
 
 
 render :: () {
-  #if true { // weird hover feature
+
+  // if you're hovering over the right side of a record
+  // hover_index will be the index of the record you're hovereing
+  // this allows for a different view of the record based on your mouse pos
+  hover_index: int = -1;
+  {
     mouse := Mouse.pos(hwnd);
     is_mouse_in_window := !(mouse.x < 0 || mouse.x > window_width || mouse.y < 0 || mouse.y > window_height);
     is_mouse_in_right_half := is_mouse_in_window && mouse.x >= window_width/4;
-    hover_index: int = ifx is_mouse_in_right_half then mouse.y/config.record_height else -1;
-  } else {
-    hover_index := -1;
+    hover_index = ifx is_mouse_in_right_half then mouse.y/config.record_height else -1;
   }
 
   update_window_transparency(can_be_transparent=hover_index == -1);
@@ -417,9 +420,11 @@ render :: () {
     }
 
 
-    if !is_streamer_mode then render_lines_of_text();
-    render_lines_of_text :: () #expand {
-      if record.type == .BITMAP || (hover_index == i && is_imgur_url(record.preview)) {
+    if !is_streamer_mode then render_lines_of_text_or_img();
+    render_lines_of_text_or_img :: () #expand {
+
+      // if it's an img, or at least sometimes an img (ex imgur)
+      if record.type == .BITMAP || (hover_index == i && can_fetch_img_from_text(record.preview)) {
 
         texture := TextureCache.get_texture_for_record(record);
         if !texture return;
