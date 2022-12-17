@@ -12,31 +12,41 @@
 
 
 // for making curl requests in the background
-// you can spam call get(url), it will only make the request once
-// once it's ready you can use the response then free it
-// there may or may not be a memory leak here? seems to use a lot of memory
-// TODO: there's a bug where the image gets stuck loading sometimes? never shows the texture. idk
-// todo: this can crash... memory issues
-// todo maybe these crashes are fixed? by making sure the key url isn't in temp storage, lol.
-// todo: the memory leak seems to be simply caused by making a request and never looking at it when it's finished. it'll never free until you view it
+// you can spam call req := request_q.get(url), it will only make the request once
+// once it's req.ready(req) you can use the req.response, then req.free(req) it
+// // example:
+// req := request_q.get("farzher.com/404");
+// if req.ready(req) {
+//   mylog(req.response); // Cannot GET /404
+//   req.free(req);
+// }
 request_q: struct {
-
+  // #import,dir "modules/Request";
   #import "Thread";
 
-  request_cache: Table(string, Request);
-  thread_group: Thread_Group;
-  inited := false;
+  request_cache   : Table(string, Request);
+  thread_group    : Thread_Group;
+  inited          := false;
+
+  Request :: struct {
+    url           : string;
+    response      : string;
+    status        : enum {NONE; FETCHING; DONE;};
+    created_at_ms : float64;
+    ready         :: (req: Request) -> bool { return req.status == .DONE; }
+    free          :: request_q.free;
+  }
+
 
   get :: (url: string) -> Request {
     ensure_init();
 
-    // req := find_or_add(*request_q.request_cache, url);
     req, found := table_find(*request_q.request_cache, url);
     if found return req;
 
     if !found {
       req: Request;
-      req.created_at = getms();
+      req.created_at_ms = getms();
       req.status = .FETCHING;
       req.url = copy_string(url); // url may be in temp storage
       req_ptr := table_add(*request_q.request_cache, req.url, req);
@@ -45,50 +55,38 @@ request_q: struct {
     return req;
   }
 
-  Request :: struct {
-    url: string;
-    response: string;
-    status: enum {NONE; FETCHING; DONE;};
-    created_at: float64;
-    // status_code: u16;
-    ready :: (req: Request) -> bool { return req.status == .DONE; }
-    free :: (req: Request) {
-      table_remove(*request_q.request_cache, req.url);
-      free(req.url.data);
-      if req.response free(req.response.data);
-    }
+
+  free :: (req: Request) {
+    table_remove(*request_q.request_cache, req.url);
+    free(req.url.data);
+    if req.response free(req.response.data);
   }
 
   free_all_old_finished_requests :: () {
+    MAX_AGE_MS :: 5000;
+
     now := getms();
     for *req: request_q.request_cache {
       if !req.ready(req) continue;
-      if (now - req.created_at) < 5000 continue; // must be at least 5 seconds old
+      if (now - req.created_at_ms) < MAX_AGE_MS continue;
       req.free(req);
     }
   }
 
   ensure_init :: () {
-    if request_q.inited return;
-    request_q.inited = true;
-    init();
+    if request_q.inited return; request_q.inited = true;
 
-    init :: () {
-      // #import "Curl";
-      // curl_global_init(CURL_GLOBAL_ALL); // this still crashes....
-      request_q.thread_group.name = "request_q.thread_group";
-      request_q.thread_group.logging = false;
-      thread_count :: 12; // how many images we can load at the same time
-      init(*request_q.thread_group, thread_count, request_q.thread_do_work);
-      start(*request_q.thread_group);
-    }
+    request_q.thread_group.name = "request_q.thread_group";
+    request_q.thread_group.logging = false;
+    thread_count :: 12; // how many images we can load at the same time
+    init(*request_q.thread_group, thread_count, request_q.thread_do_work);
+    start(*request_q.thread_group);
   }
 
   thread_do_work :: (group: *Thread_Group, thread: *Thread, work: *void) -> Thread_Continue_Status {
     req := cast(*Request)work;
 
     req.response = request(req.url, timeout_seconds=2);
-    // req.response = copy_string(#run request("https://i.imgur.com/EeDK4j5.png", timeout_seconds=2));
     req.status = .DONE;
 
     return .CONTINUE;
@@ -224,6 +222,14 @@ ghetto_regex_capture :: (str: string, begin: string, is_matching_fn: (u8)->bool)
 
   return Strings.substring(str, index, end_index - index);
 }
+
+
+
+
+
+
+
+
 
 
 
