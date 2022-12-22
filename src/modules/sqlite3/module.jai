@@ -1,9 +1,9 @@
 #if true { // encryption
-  sqlite3 :: #foreign_library "win-encrypted/sqlite3_x64"; // https://github.com/rindeal/SQLite3-Encryption
+  sqlite3 :: #library "win-encrypted/sqlite3_x64"; // https://github.com/rindeal/SQLite3-Encryption
   sqlite3_key   ::  (db: *sqlite3db, pkey: *void, nkey: s32) -> s32 #foreign sqlite3;
   sqlite3_rekey ::  (db: *sqlite3db, pkey: *void, nkey: s32) -> s32 #foreign sqlite3;
 } else {
-  sqlite3 :: #foreign_library "win/sqlite3";
+  sqlite3 :: #library "win/sqlite3";
 }
 
 sqlite3_libversion :: () -> *u8 #foreign sqlite3;

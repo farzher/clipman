@@ -198,17 +198,17 @@ ShellExecuteA :: (hwnd: HWND, lpOperation: *u8, lpFile: *u8, lpParmeters: *u8, l
 ShellExecuteW :: (hwnd: HWND, lpOperation: *u8, lpFile: *u8, lpParmeters: *u8, lpDirectory: *u8, nShowCmd: int) -> s32 #foreign shell32;
 
 #scope_file
-ntdll       :: #foreign_system_library "Ntdll";
-kernel32    :: #foreign_system_library "kernel32";
-winmm       :: #foreign_system_library "winmm";
-user32      :: #foreign_system_library "user32";
-shell32     :: #foreign_system_library "shell32";
-Crt         :: #foreign_system_library "msvcrt";
-gdi         :: #foreign_system_library "Gdi32";
-gl          :: #foreign_system_library "opengl32";
-Dwmapi      :: #foreign_system_library "Dwmapi";
-DbgHelp     :: #foreign_system_library "DbgHelp";
-Advapi32    :: #foreign_system_library "Advapi32";
-Shlwapi     :: #foreign_system_library "shlwapi";
-comdlg32    :: #foreign_system_library "comdlg32";
-UxTheme     :: #foreign_system_library "UxTheme";
+ntdll       :: #system_library "Ntdll";
+kernel32    :: #system_library "kernel32";
+winmm       :: #system_library "winmm";
+user32      :: #system_library "user32";
+shell32     :: #system_library "shell32";
+Crt         :: #system_library "msvcrt";
+gdi         :: #system_library "Gdi32";
+gl          :: #system_library "opengl32";
+Dwmapi      :: #system_library "Dwmapi";
+DbgHelp     :: #system_library "DbgHelp";
+Advapi32    :: #system_library "Advapi32";
+Shlwapi     :: #system_library "shlwapi";
+comdlg32    :: #system_library "comdlg32";
+UxTheme     :: #system_library "UxTheme";

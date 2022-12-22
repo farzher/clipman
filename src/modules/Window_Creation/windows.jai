@@ -8,7 +8,7 @@ create_window :: (width: int, height: int, window_name: string, window_x := -1, 
         style = SECONDARY_WINDOW_STYLE;
 
     SPI_GETWORKAREA :: 0x30;
-    user32 :: #foreign_system_library "user32";
+    user32 :: #system_library "user32";
     SystemParametersInfoW :: (uiAction: u32, uiParam: u32, pvParam: *void, fWinIni: u32) -> BOOL #foreign user32;
 
     if window_x == -1 {
@@ -240,4 +240,4 @@ get_mouse_pointer_position :: inline (right_handed := false) -> x: int, y: int, 
 
 #scope_file
 
-user32   :: #foreign_system_library "user32";
+user32   :: #system_library "user32";

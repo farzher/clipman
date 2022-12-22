@@ -224,4 +224,4 @@ get_mouse_pointer_position :: inline (right_handed := false) -> x: int, y: int, 
 
 //#scope_file
 
-// libc :: #foreign_system_library "libc";
+// libc :: #system_library "libc";
