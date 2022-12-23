@@ -297,7 +297,7 @@ update :: () {
 
           case 517; // right click release
 
-            selection := popup_menu(.["Exit", "Encrypt", "Cleanup Large Clips", "Config / Settings", "Import from Ditto", "Open"]);
+            selection := popup_menu(.["Exit", "Encrypt", "Cleanup Large Clips", "VACUUM DB", "Config / Settings", "Import from Ditto", "Open"]);
             if selection == {
 
               case "Exit"; exit(0);
@@ -323,6 +323,8 @@ update :: () {
                   SQL, config.on_startup_delete_clips_bigger_than);
                 }
                 db.query("VACUUM"); // this is slow
+
+              case "VACUUM DB"; db.query("VACUUM");
 
               case "Encrypt";
                 if is_db_locked break; // db cannot be encrypted because it's currently locked
@@ -420,11 +422,12 @@ render :: () {
     }
 
 
-    if !is_streamer_mode then render_lines_of_text_or_img();
+    render_lines_of_text_or_img();
     render_lines_of_text_or_img :: () #expand {
 
       // if it's an img, or at least sometimes an img (ex imgur)
       if record.type == .BITMAP || (hover_index == i && can_fetch_img_from_text(record.preview)) {
+        if is_streamer_mode return;
 
         texture := TextureCache.get_texture_for_record(record);
         if !texture return;
@@ -467,18 +470,18 @@ render :: () {
               text.data += search_string.count;
               text.count -= search_string.count;
 
-              text_width := Simp.prepare_text(my_font, matchingtext);
+              text_width := Simp.prepare_text(my_font, maybe_censor(matchingtext));
               Simp.draw_prepared_text(my_font, xx text_x, xx text_y, COLORS.RED);
               text_x += text_width;
             }
 
-            text_width := Simp.prepare_text(my_font, text);
+            text_width := Simp.prepare_text(my_font, maybe_censor(text));
             the_color := color;
             Simp.draw_prepared_text(my_font, xx text_x, xx text_y, the_color);
             text_x += text_width;
           }
         } else {
-          text_width := Simp.prepare_text(my_font, line);
+          text_width := Simp.prepare_text(my_font, maybe_censor(line));
           text_x := 12;
           text_y := -12/2 + window_height - i*config.record_height - my_font.character_height*(line_count+1);
           the_color := ifx selected_index == i then COLORS.RED else color;
@@ -515,13 +518,7 @@ render :: () {
     ms := getms();
     if ms - search_input.last_keypress_time >= 1000 then return;
 
-    search_string_to_render: string = <<search_string;
-    if is_db_locked {
-      search_string_to_render.data = talloc(search_string_to_render.count);
-      memset(search_string_to_render.data, #char"*", search_string_to_render.count);
-    }
-
-    text_width := Simp.prepare_text(my_big_font, search_string_to_render);
+    text_width := Simp.prepare_text(my_big_font, maybe_censor(<<search_string));
     text_x := window_width/2 - text_width/2;
     text_y := window_height - 100;
     color := COLORS.RED;
@@ -539,10 +536,11 @@ render :: () {
     //     sy0 := cast(float) text_y;
     //     sy1 := cast(float) text_y+my_big_font.character_height;
 
-    //     p0 := make_vector2(sx0, sy0);
-    //     p1 := make_vector2(sx1, sy0);
-    //     p2 := make_vector2(sx1, sy1);
-    //     p3 := make_vector2(sx0, sy1);
+    //     #import "Math";
+    //     p0 := Vector2.{sx0, sy0};
+    //     p1 := Vector2.{sx1, sy0};
+    //     p2 := Vector2.{sx1, sy1};
+    //     p3 := Vector2.{sx0, sy1};
 
     //     Simp.set_shader_for_color(true);
     //     Simp.immediate_quad(p0, p1, p2, p3, color);
