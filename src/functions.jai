@@ -178,15 +178,15 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
 
   bitmap: Simp.Bitmap;
   // Simp.bitmap_load_from_memory(*bitmap, xx bitmapinfobytes);
-  bmpinfo: *BITMAPINFO = xx bitmapinfobytes.data;
-  bitmap.width = bmpinfo.bmiHeader.biWidth;
-  bitmap.height = bmpinfo.bmiHeader.biHeight;
-  bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFO); // is this actually correct?
-
-
-  if bmpinfo.bmiHeader.biBitCount == 24 then bitmap.format = .RGB8; else bitmap.format = .BGRA8;
+  bitmap_header: *BITMAPINFOHEADER = xx bitmapinfobytes.data;
+  bitmap.width = bitmap_header.biWidth;
+  bitmap.height = bitmap_header.biHeight;
+  if bitmap_header.biBitCount == 24 then bitmap.format = .RGB8; else bitmap.format = .BGRA8;
   _size, _stride := Simp.get_image_size(bitmap.format, bitmap.width, bitmap.height);
   bitmap.stride = xx _stride;
+  bitmap.data.count = _size;
+  bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFOHEADER);
+  if bitmap_header.biCompression == BI_BITFIELDS then bitmap.data.data += 3 * 4/*bytes*/;
 
   // doesn't support bgr
   // Simp.bitmap_save(*bitmap, filepath);
@@ -199,15 +199,8 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
 
   // change format from .BGRA8 to .RGBA8
   // wtf??? this is so weird.
-  bitmap.data.count = _size;
-  if components == 4 {
-    for i: 0 .. bitmap.width*bitmap.height-1 {
-      Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
-    }
-  } else if components == 3 {
-    for i: 0 .. bitmap.width*bitmap.height-1 {
-      Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+1]);
-    }
+  for i: 0 .. bitmap.width*bitmap.height-1 {
+    Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
   }
 
 

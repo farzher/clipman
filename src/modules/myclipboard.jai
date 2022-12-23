@@ -56,18 +56,16 @@ using #import "Clipboard";
         cb_hnd := GetClipboardData(CF_DIB);
         if !cb_hnd then return "";
 
-        GlobalLock(cb_hnd);
+        size := GlobalSize(cb_hnd);
+        data := GlobalLock(cb_hnd);
         defer GlobalUnlock(cb_hnd);
 
-        bmpinfo: *BITMAPINFO = cb_hnd;
-        w := bmpinfo.bmiHeader.biWidth;
-        h := bmpinfo.bmiHeader.biHeight;
-        bisize := bmpinfo.bmiHeader.biSize;
-        bitcount := bmpinfo.bmiHeader.biBitCount;
+        raw_bytes: string;
+        raw_bytes.data = data;
+        raw_bytes.count = xx size;
 
-        bytes := talloc_string(size_of(BITMAPINFO) + w * h * (bitcount/8));
-        memcpy(bytes.data, cb_hnd, bytes.count);
-
+        bytes := talloc_string(xx size);
+        memcpy(bytes.data, data, bytes.count);
         return bytes;
     }
 

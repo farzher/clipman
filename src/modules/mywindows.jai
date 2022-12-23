@@ -194,8 +194,14 @@ NIM_SETVERSION :: 0x04;
 DwmFlush :: () -> HRESULT #foreign Dwmapi;
 
 
+GlobalSize :: (hMem: HGLOBAL) -> SIZE_T #foreign kernel32;
+
 ShellExecuteA :: (hwnd: HWND, lpOperation: *u8, lpFile: *u8, lpParmeters: *u8, lpDirectory: *u8, nShowCmd: int) -> s32 #foreign shell32;
 ShellExecuteW :: (hwnd: HWND, lpOperation: *u8, lpFile: *u8, lpParmeters: *u8, lpDirectory: *u8, nShowCmd: int) -> s32 #foreign shell32;
+
+LPVOID :: *void;
+CreateDIBitmap :: (hdc: HDC, pbmih: *BITMAPINFOHEADER, flInit: DWORD, pjBits: *void, pbmi: *BITMAPINFO, iUsage: u32) -> HBITMAP #foreign gdi;
+GetDIBits :: (hdc: HDC, hbm: HBITMAP, start: u32, cLines: u32, lpvBits: LPVOID, BITMAPINFO_ptr: *void, usage: u32) -> s32 #foreign gdi;
 
 #scope_file
 ntdll       :: #system_library "Ntdll";

@@ -117,7 +117,7 @@ TextureCache: struct {
     textureptr := find_pointer(TextureCache.texture_cache, record.id);
     if textureptr then return textureptr;
 
-    // imgur records require different processing than normal bitmap records
+    // ual records require different processing than normal bitmap records
     if can_fetch_img_from_record_text {
 
       request_q.free_all_old_finished_requests(); // todo: this shouldn't be here
@@ -131,35 +131,42 @@ TextureCache: struct {
       return add(*TextureCache.texture_cache, record.id, texture);
     }
 
-    // texture: Simp.Texture;
-    // Simp.texture_load_from_memory(*texture, xx decompress(record.preview));
-    // return add(*TextureCache.texture_cache, record.id, texture);
-
+    bitmap := windows_bitmap_to_simp_bitmap(decompress(record.preview));
     texture: Simp.Texture;
-    bitmap: Simp.Bitmap;
-    bitmapinfobytes := decompress(record.preview);
-    bmpinfo: *BITMAPINFO = xx bitmapinfobytes.data;
-    bitmap.width = bmpinfo.bmiHeader.biWidth;
-    bitmap.height = bmpinfo.bmiHeader.biHeight;
-    bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFO); // is this actually correct?
-    if bmpinfo.bmiHeader.biBitCount == 24 then bitmap.format = .RGB8; else bitmap.format = .BGRA8;
-    _size, _stride := Simp.get_image_size(bitmap.format, bitmap.width, bitmap.height);
-    bitmap.stride = xx _stride;
-
-    // wtf??? this is so weird.
-    // colors are messed up so i'm swapping them... I DON"T KNOW
-    components : s32 = 4;
-    if bitmap.format == .RGB8 components = 3;
-    if components == 3 {
-      bitmap.data.count = _size;
-      for i: 0 .. bitmap.width*bitmap.height-1 {
-        Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+1]);
-      }
-    }
-
     Simp.texture_load_from_bitmap(*texture, *bitmap);
     return add(*TextureCache.texture_cache, record.id, texture);
   }
+}
+
+// cf_dib is the raw contents of GetClipboardData(CF_DIB)
+// try to parse this thing into a simp bitmap
+// todo: some images render skewed or with the wrong colors. dude, idk, i tried
+windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
+  bitmap: Simp.Bitmap;
+  bitmap_header: *BITMAPINFOHEADER = xx cf_dib.data;
+
+  BI_BITFIELDS :: 3;
+
+  bitmap.width      = bitmap_header.biWidth;
+  bitmap.height     = bitmap_header.biHeight;
+  bitmap.format     = ifx bitmap_header.biBitCount == 24 then Simp.Texture_Format.RGB8 else .BGRA8;
+  _size, _stride := Simp.get_image_size(bitmap.format, bitmap.width, bitmap.height);
+  bitmap.stride     = xx _stride;
+  bitmap.data.count = _size;
+  bitmap.data.data  = cf_dib.data + size_of(BITMAPINFOHEADER);
+  if bitmap_header.biCompression == BI_BITFIELDS then bitmap.data.data += 3 * 4/*bytes*/;
+
+  // wtf??? this is so weird.
+  // colors are messed up so i'm swapping them... I DON"T KNOW
+  components : s32 = 4;
+  if bitmap.format == .RGB8 components = 3;
+  if components == 3 {
+    for i: 0 .. bitmap.width*bitmap.height-1 {
+      Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
+    }
+  }
+
+  return bitmap;
 }
 
 can_fetch_img_from_text :: (str: string) -> bool { return is_imgur_url(str) || is_youtube_url(str) || is_twitch_url(str); }
