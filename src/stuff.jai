@@ -131,6 +131,10 @@ TextureCache: struct {
       return add(*TextureCache.texture_cache, record.id, texture);
     }
 
+    // texture: Simp.Texture;
+    // Simp.texture_load_from_memory(*texture, xx decompress(record.preview));
+    // return add(*TextureCache.texture_cache, record.id, texture);
+
     texture: Simp.Texture;
     bitmap: Simp.Bitmap;
     bitmapinfobytes := decompress(record.preview);
@@ -138,21 +142,31 @@ TextureCache: struct {
     bitmap.width = bmpinfo.bmiHeader.biWidth;
     bitmap.height = bmpinfo.bmiHeader.biHeight;
     bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFO); // is this actually correct?
-    // bitmap.format = .BGRA8;
+    if bmpinfo.bmiHeader.biBitCount == 24 then bitmap.format = .RGB8; else bitmap.format = .BGRA8;
     _size, _stride := Simp.get_image_size(bitmap.format, bitmap.width, bitmap.height);
     bitmap.stride = xx _stride;
 
-    success := Simp.texture_load_from_bitmap(*texture, *bitmap);
-    if !success  die("failed to load texture", record.id);
+    // wtf??? this is so weird.
+    // colors are messed up so i'm swapping them... I DON"T KNOW
+    components : s32 = 4;
+    if bitmap.format == .RGB8 components = 3;
+    if components == 3 {
+      bitmap.data.count = _size;
+      for i: 0 .. bitmap.width*bitmap.height-1 {
+        Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+1]);
+      }
+    }
 
+    Simp.texture_load_from_bitmap(*texture, *bitmap);
     return add(*TextureCache.texture_cache, record.id, texture);
   }
 }
 
-can_fetch_img_from_text :: (str: string) -> bool { return is_imgur_url(str) || is_youtube_url(str); }
+can_fetch_img_from_text :: (str: string) -> bool { return is_imgur_url(str) || is_youtube_url(str) || is_twitch_url(str); }
 get_img_url_from_text :: (str: string) -> string {
-  if is_imgur_url(str) return str;
+  if is_imgur_url(str)   return str;
   if is_youtube_url(str) return _("https://img.youtube.com/vi/%{youtube_videoid_from_url(str)}/0.jpg");
+  if is_twitch_url(str)  return _("https://static-cdn.jtvnw.net/previews-ttv/live_user_%{twitch_username_from_url(str)}-0x0.jpg");
   return "";
 }
 
@@ -189,24 +203,31 @@ is_youtube_url :: (str: string) -> bool {
   return true;
 }
 
+is_twitch_url :: (str: string) -> bool {
+  if obviously_not_a_url(str) return false;
+
+  if !Strings.contains(str, "twitch.tv/") return false;
+
+  return true;
+}
+twitch_username_from_url :: (str: string) -> string {
+  username := ghetto_regex_capture(str, "twitch.tv/", is_alnum);
+  Strings.to_lower(username);
+  return username;
+}
+
 obviously_not_a_url :: (str: string) -> bool {
   if str.count > 10_000 return true;
   if Strings.contains(str, "\n") return true;
   return false;
 }
 
+return_this_if :: (code: Code) #expand {value := #insert code; if value `return value; }
 youtube_videoid_from_url :: (str: string) -> string {
   if !is_youtube_url(str) return "";
-
-  videoid: string;
-
-  videoid = ghetto_regex_capture(str, "youtube.com/watch?v=", is_alnum);
-  if videoid return videoid;
-
-  videoid = ghetto_regex_capture(str, "youtu.be/", is_alnum);
-  if videoid return videoid;
-
-  return videoid;
+  return_this_if(ghetto_regex_capture(str, "youtube.com/watch?v=", is_alnum));
+  return_this_if(ghetto_regex_capture(str, "youtu.be/", is_alnum));
+  return "";
 }
 
 ghetto_regex_capture :: (str: string, begin: string, is_matching_fn: (u8)->bool) -> string {
@@ -250,7 +271,14 @@ update_search_string :: () {
 
 
 
-
+censor :: (str: string) -> string {
+  censored := talloc_string(str.count);
+  memset(censored.data, #char"*", censored.count);
+  return censored;
+}
+maybe_censor :: (str: string) -> string {
+  return ifx is_streamer_mode || is_db_locked censor(str) else str;
+}
 
 
 
@@ -362,7 +390,7 @@ popup_menu :: (items: []string) -> string {
 // tinyfiledialogs is dumb and should be replaced
 showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
   // DialogBoxParamW :: (hInstance: HINSTANCE, lpTemplate: LPCWSTR, hWndParent: HWND, lpDialogFunc: *void, dwInitParam: LPARAM) -> s32 #foreign user32;
-  tinyfd :: #foreign_library,no_dll "../bin/tinyfiledialogs64";
+  tinyfd :: #library,no_dll "../bin/tinyfiledialogs64";
   tinyfd_inputBox :: (title: *u8, message: *u8, defaultinput: *u8) -> *u8 #foreign tinyfd;
 
   // memory leak? where's the memory for the returned string? is it really on the stack?

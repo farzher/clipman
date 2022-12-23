@@ -184,7 +184,7 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
   bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFO); // is this actually correct?
 
 
-  // bitmap.format = .BGRA8;
+  if bmpinfo.bmiHeader.biBitCount == 24 then bitmap.format = .RGB8; else bitmap.format = .BGRA8;
   _size, _stride := Simp.get_image_size(bitmap.format, bitmap.width, bitmap.height);
   bitmap.stride = xx _stride;
 
@@ -200,8 +200,14 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
   // change format from .BGRA8 to .RGBA8
   // wtf??? this is so weird.
   bitmap.data.count = _size;
-  for i: 0 .. bitmap.width*bitmap.height-1 {
-    Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
+  if components == 4 {
+    for i: 0 .. bitmap.width*bitmap.height-1 {
+      Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
+    }
+  } else if components == 3 {
+    for i: 0 .. bitmap.width*bitmap.height-1 {
+      Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+1]);
+    }
   }
 
 
