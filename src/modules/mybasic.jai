@@ -23,15 +23,82 @@ die :: (args: ..Any) {
   exit(1);
 }
 
-// mylog :: (args: ..Any) {
-//   prefix :: "[netcode] ";
-//   tmp :: "% ";
-//   format := talloc_string(prefix.count + args.count*tmp.count + 1/*newline*/);
-//   memcpy(format.data, prefix.data, prefix.count);
-//   for arg, i: args  memcpy(format.data + prefix.count + i*tmp.count, tmp.data, tmp.count);
-//   format[format.count-1] = #char"\n";
-//   log(format, ..args);
-// }
+
+logx :: ($code: Code, loc := #caller_location) -> code.type #expand {
+  #import "Program_Print";
+  #import "Compiler";
+  #import "String";
+
+  code_string := #insert -> string {
+    node := compiler_get_nodes(code);
+    if node.kind == .PROCEDURE_CALL return _logx_procedure_call(node);
+    else                            return "#run code_to_string(code);";
+  };
+
+  result := #insert code;
+  filename := path_filename(loc.fully_pathed_filename);
+  log("[%:%] % = %", filename, loc.line_number, code_string, wrap_in_quotes_if_string(result));
+  return result;
+
+
+  _logx_procedure_call :: (root: *Code_Node) -> string {
+    procedure_node := cast(*Code_Procedure_Call)root;
+
+    format_str: String_Builder;
+    args: [..] string;
+    format_str_for_args: [..] string;
+    append(*format_str, node_to_string(procedure_node.procedure_expression));
+    append(*format_str, "(");
+    for argument: procedure_node.arguments_unsorted {
+      node := argument.expression;
+      val := node_to_string(node);
+      full_argument_name := ifx argument.name then join(argument.name.name, "=") else "";
+      array_add(*format_str_for_args, join(full_argument_name, "%"));
+      array_add(*args, tprint("#insert,scope(code) \"wrap_in_quotes_if_string(%);\"", escape(val)));
+    }
+    append(*format_str, join(..format_str_for_args, ", "));
+    append(*format_str, ")");
+
+    return tprint("tprint(\"%\", %);", escape(builder_to_string(*format_str)), join(..args, ", "));
+  }
+  code_to_string :: (code: Code) -> string #expand {
+    builder: String_Builder;
+    print_expression(*builder, compiler_get_nodes(code));
+    return builder_to_string(*builder, allocator=temp);
+  }
+  node_to_string :: (node: *Code_Node) -> string #expand {
+    builder: String_Builder;
+    print_expression(*builder, node);
+    return builder_to_string(*builder, allocator=temp);
+  }
+}
+// logx depends on this at runtime
+wrap_in_quotes_if_string :: (thing: $T) -> string {
+  #if T == string return tprint("\"%\"", escape(thing));
+  else            return tprint("%", thing);
+}
+// logx depends on this at runtime
+escape :: (str: string) -> string {
+  if str == "" return "";
+
+  result: String_Builder;
+  for i: 0 .. str.count - 1 {
+    if str[i] == {
+      case #char "\\"; append(*result, "\\\\");
+      case #char "\e"; append(*result, "\\e");
+      case #char "\n"; append(*result, "\\n");
+      case #char "\r"; append(*result, "\\r");
+      case #char "\t"; append(*result, "\\t");
+      case #char "\""; append(*result, "\\\"");
+      case #char "\0"; append(*result, "\\0");
+      case;
+        if str[i] < 32 print_to_builder(*result, "\\x%", formatInt(str[i], 16, 2));
+        else           append(*result, str[i]);
+    }
+  }
+  return builder_to_string(*result);
+}
+
 
 #scope_file
 Compiler :: #import "Compiler";
@@ -242,10 +309,10 @@ embed_file :: (file_path: string) -> []u8 {
 
 Global :: (code: Code) #expand {
   Compiler :: #import "Compiler";
-  #run Compiler.add_build_string(tprint("%;", code2string(code)));
+  #run Compiler.add_build_string(tprint("%;", code_to_string(code)));
 }
 
-code2string :: (code: Code) -> string #expand {
+code_to_string :: (code: Code) -> string #expand {
   PP       :: #import "Program_Print";
   Compiler :: #import "Compiler";
   code_node := Compiler.compiler_get_nodes(code);
@@ -273,7 +340,7 @@ operator []= :: (t: *Table(string, string), index: string, value: string) {;
 #if OS == .WINDOWS {
   #scope_file
   #import "Windows";
-  kernel32 :: #foreign_system_library "kernel32";
+  kernel32 :: #system_library "kernel32";
   stdinhandle: HANDLE;
   ReadConsoleA :: (hConsoleHandle: HANDLE, buff : *u8, chars_to_read : s32,  chars_read : *s32, lpInputControl := *void ) -> BOOL #foreign kernel32;
 
