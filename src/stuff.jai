@@ -94,6 +94,12 @@ request_q: struct {
 }
 
 
+
+// TextureCache.get_texture_for_record will return from the cache if it exists,
+// or put it in the cache and return it.
+// the cache uses my_lru_cache which probably should be improved.
+// this will keep up to MAX_RECORDS textures around in ram forever. would be nice to delete
+// old stuff when clipman isn't in use for a while
 TextureCache: struct {
   #import,file "modules/my_lru_cache.jai";
 
@@ -111,13 +117,13 @@ TextureCache: struct {
     can_fetch_img_from_record_text := can_fetch_img_from_text(record.preview);
 
     // guard against non-image records
-    if record.type != .BITMAP && !can_fetch_img_from_record_text then return null;
+    if record.type != .BITMAP && record.type != .WEBP && !can_fetch_img_from_record_text then return null;
 
     // if the texture is already in the cache return it
     textureptr := find_pointer(TextureCache.texture_cache, record.id);
     if textureptr then return textureptr;
 
-    // ual records require different processing than normal bitmap records
+    // url records require different processing than normal bitmap records
     if can_fetch_img_from_record_text {
 
       request_q.free_all_old_finished_requests(); // todo: this shouldn't be here
@@ -131,43 +137,17 @@ TextureCache: struct {
       return add(*TextureCache.texture_cache, record.id, texture);
     }
 
-    bitmap := windows_bitmap_to_simp_bitmap(decompress(record.preview));
-    texture: Simp.Texture;
-    Simp.texture_load_from_bitmap(*texture, *bitmap);
-    return add(*TextureCache.texture_cache, record.id, texture);
-  }
-}
-
-// cf_dib is the raw contents of GetClipboardData(CF_DIB)
-// try to parse this thing into a simp bitmap
-// todo: some images render skewed or with the wrong colors. dude, idk, i tried
-windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
-  bitmap: Simp.Bitmap;
-  bitmap_header: *BITMAPINFOHEADER = xx cf_dib.data;
-
-  BI_BITFIELDS :: 3;
-
-  bitmap.width      = bitmap_header.biWidth;
-  bitmap.height     = bitmap_header.biHeight;
-  bitmap.format     = ifx bitmap_header.biBitCount == 24 then Simp.Texture_Format.RGB8 else .BGRA8;
-  _size, _stride := Simp.get_image_size(bitmap.format, bitmap.width, bitmap.height);
-  bitmap.stride     = xx _stride;
-  bitmap.data.count = _size;
-  bitmap.data.data  = cf_dib.data + size_of(BITMAPINFOHEADER);
-  if bitmap_header.biCompression == BI_BITFIELDS then bitmap.data.data += 3 * 4/*bytes*/;
-
-  // wtf??? this is so weird.
-  // colors are messed up so i'm swapping them... I DON"T KNOW
-  components : s32 = 4;
-  if bitmap.format == .RGB8 components = 3;
-  if components == 3 {
-    for i: 0 .. bitmap.width*bitmap.height-1 {
-      Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
+    if record.type == .BITMAP || record.type == .WEBP {
+      bitmap := windows_bitmap_to_simp_bitmap(record_to_windows_bitmap(record));
+      texture: Simp.Texture;
+      Simp.texture_load_from_bitmap(*texture, *bitmap);
+      return add(*TextureCache.texture_cache, record.id, texture);
     }
-  }
 
-  return bitmap;
+    assert(false); return null; // not all control paths return a value;
+  }
 }
+
 
 can_fetch_img_from_text :: (str: string) -> bool { return is_imgur_url(str) || is_youtube_url(str) || is_twitch_url(str); }
 get_img_url_from_text :: (str: string) -> string {
@@ -414,4 +394,185 @@ mylastindex :: (str: string, char: u8) -> int {
     i -= 1;
   }
   return -1;
+}
+
+
+
+
+
+
+
+
+
+// cf_dib is the raw contents of GetClipboardData(CF_DIB)
+// try to parse this thing into a simp bitmap
+windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
+  BI_BITFIELDS :: 3;
+
+  bitmap_header: *BITMAPINFOHEADER = xx cf_dib.data;
+
+  bytes_per_pixel := (() -> int #expand {
+    if bitmap_header.biBitCount == 24 return 3;
+    if bitmap_header.biBitCount == 32 return 4;
+    assert(false); // shouldn't get here
+  })();
+
+  bitmap_pixeldata := (() -> string #expand {
+    pixel_offset := size_of(BITMAPINFOHEADER);
+    if bitmap_header.biCompression == BI_BITFIELDS then pixel_offset += 3*4;
+
+    bitmap_pixeldata := cf_dib;
+    bitmap_pixeldata.data += pixel_offset;
+    bitmap_pixeldata.count -= pixel_offset;
+
+    // if bytes_per_pixel is 3, convert it to 4, so we don't have to worry about 4 byte padding and junk
+    ensure_4_bytes_per_pixel_BGRA_format();
+    ensure_4_bytes_per_pixel_BGRA_format :: () #expand {
+      if bytes_per_pixel == 4 return;
+      assert(bytes_per_pixel == 3);
+
+      correct_pixeldata := talloc_string(bitmap_header.biWidth * bitmap_header.biHeight * 4);
+
+      pixels_pushed := 0;
+      push_pixel :: (r: u8, g: u8, b: u8) #expand {
+        correct_pixeldata[pixels_pushed*4+0] = b;
+        correct_pixeldata[pixels_pushed*4+1] = g;
+        correct_pixeldata[pixels_pushed*4+2] = r;
+        correct_pixeldata[pixels_pushed*4+3] = 255;
+        pixels_pushed += 1;
+      }
+
+      w := bitmap_header.biWidth;
+      stride_padding := bitmap_header.biWidth % 4;
+
+      mylog("wut?", bitmap_pixeldata.count, w*bitmap_header.biHeight);
+
+      for y: 0..bitmap_header.biHeight-1 {
+        for x: 0..bitmap_header.biWidth-1 {
+          push_pixel(
+            bitmap_pixeldata[(x+y*w)*3 +stride_padding*y +2],
+            bitmap_pixeldata[(x+y*w)*3 +stride_padding*y +1],
+            bitmap_pixeldata[(x+y*w)*3 +stride_padding*y +0]
+          );
+        }
+      }
+
+      bitmap_pixeldata = xx correct_pixeldata;
+      bytes_per_pixel = 4;
+    }
+
+    return bitmap_pixeldata;
+  })();
+
+  bitmap: Simp.Bitmap;
+  bitmap.width  = bitmap_header.biWidth;
+  bitmap.height = bitmap_header.biHeight;
+  bitmap.format = .BGRA8;
+  bitmap.stride = bitmap.width * 4;
+  bitmap.data   = xx bitmap_pixeldata;
+  return bitmap;
+}
+
+#import,dir "modules/libwebp";
+
+windows_bitmap_to_webp :: (bitmapinfobytes: string, quality : float = 90) -> webpbytes: string, width: s32, height: s32 {
+  bitmap := windows_bitmap_to_simp_bitmap(bitmapinfobytes);
+  webpbytesptr: *u8;
+  webpbytecount: int;
+  if bitmap.format == .RGB8 {
+    webpbytecount = WebPEncodeRGB (bitmap.data.data, bitmap.width, bitmap.height, bitmap.stride, quality, *webpbytesptr);
+  } else {
+    webpbytecount = WebPEncodeRGBA(bitmap.data.data, bitmap.width, bitmap.height, bitmap.stride, quality, *webpbytesptr);
+  }
+  defer WebPFree(webpbytesptr);
+  webpbytesstr: string;
+  webpbytesstr.data = webpbytesptr;
+  webpbytesstr.count = webpbytecount;
+  return copy_string(webpbytesstr, allocator=temp), bitmap.width, bitmap.height;
+}
+
+webp_to_pixels :: (webpbytes: string) -> pixels: string, width: s32, height: s32 {
+  width: s32;
+  height: s32;
+  pixeldata := WebPDecodeRGBA(webpbytes.data, xx webpbytes.count, *width, *height);
+  defer WebPFree(pixeldata);
+  pixels: string;
+  pixels.data = pixeldata;
+  pixels.count = width*height*4;
+  return copy_string(pixels, allocator=temp), width, height;
+}
+
+webp_to_simp_bitmap :: (webpbytes: string) -> Simp.Bitmap {
+  pixels, width, height := webp_to_pixels(webpbytes);
+  return windows_bitmap_to_simp_bitmap(pixels_to_windows_bitmap(pixels, width, height));
+}
+
+webp_to_windows_bitmap :: (webpbytes: string) -> string {
+  pixels, width, height := webp_to_pixels(webpbytes);
+  return pixels_to_windows_bitmap(pixels, width, height);
+}
+
+webp_to_webp :: (webpbytes: string, quality : float = 70) -> string {
+  pixels, width, height := webp_to_pixels(webpbytes);
+  // note: probably some unecessary work in here
+  bitmap := pixels_to_windows_bitmap(pixels, width, height);
+  return windows_bitmap_to_webp(bitmap, quality=quality);
+}
+
+pixels_to_windows_bitmap :: (pixels: string, width: s32, height: s32) -> string {
+  bitmap_header: BITMAPINFOHEADER;
+  bitmap_header.biWidth = width;
+  bitmap_header.biHeight = height;
+  bitmap_header.biSize = 40;
+  bitmap_header.biPlanes = 1;
+  bitmap_header.biBitCount = 8*4;
+  bitmap_header.biSizeImage = xx (width*height * 4/*rgba bytes per pixel*/);
+
+  bitmap_header_str := to_stringbytes(*bitmap_header);
+
+  #import "String";
+  return join(bitmap_header_str, pixels, allocator=temp);
+}
+
+record_to_windows_bitmap :: (record: DbRecord) -> string {
+  if record.type == .BITMAP return decompress(record.preview);
+
+  cached_bitmap := read_entire_file_from_clipman_cache_temp_folder(_("${record.id}"));
+  if cached_bitmap.count return decompress(cached_bitmap);
+  if record.type == .WEBP return webp_to_windows_bitmap(record.preview);
+
+  return ""; // all return paths
+}
+
+to_stringbytes :: (thing: *$T) -> string {
+  str: string;
+  str.data  = xx thing;
+  str.count = size_of(T);
+  return str;
+}
+
+
+read_entire_file_from_clipman_cache_temp_folder :: (name: string) -> bytes: string {
+  temp := getenv("temp");
+  if !temp {
+    mylog("couldn't find %temp% folder, full quality image cache won't exist");
+    return "";
+  }
+
+  temp_folder_path := to_string(temp);
+  clipman_cache_path := _("${temp_folder_path}/clipman");
+  make_directory_if_it_does_not_exist(clipman_cache_path);
+  return read_entire_file(_("${clipman_cache_path}/${name}"));
+}
+write_entire_file_to_clipman_cache_temp_folder :: (name: string, data: string) {
+  temp := getenv("temp");
+  if !temp {
+    mylog("couldn't find %temp% folder, full quality image cache won't exist");
+    return;
+  }
+
+  temp_folder_path := to_string(temp);
+  clipman_cache_path := _("${temp_folder_path}/clipman");
+  make_directory_if_it_does_not_exist(clipman_cache_path);
+  write_entire_file(_("${clipman_cache_path}/${name}"), data);
 }

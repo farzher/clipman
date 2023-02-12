@@ -58,7 +58,7 @@ knuth_morris_pratt_last_index :: (haystack: string, needle: string, start_index:
 #scope_file
 
 
-#import,dir "../Strings_Shared";
+// #import,dir "../Strings_Shared";
 
 max_thread_count :: strings_shared_max_thread_count;
 

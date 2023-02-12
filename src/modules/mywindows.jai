@@ -118,19 +118,19 @@ SetPriorityClass :: (hProcess: HANDLE, dwPriorityClass: DWORD) -> BOOL #foreign 
 // HIGH_PRIORITY_CLASS :: 0x00000080;
 
 
-RGBQUAD :: struct {
-    rgbBlue: u8;
-    rgbGreen: u8;
-    rgbRed: u8;
-    rgbReserved: u8;
-}
+// RGBQUAD :: struct {
+//     rgbBlue: u8;
+//     rgbGreen: u8;
+//     rgbRed: u8;
+//     rgbReserved: u8;
+// }
 
-BITMAPINFO :: struct {
-    bmiHeader: BITMAPINFOHEADER;
-    bmiColors: [1]RGBQUAD;
-}
+// BITMAPINFO :: struct {
+//     bmiHeader: BITMAPINFOHEADER;
+//     bmiColors: [1]RGBQUAD;
+// }
 
-GetObjectW :: (h: HANDLE, c: s32, pv: *void) -> s32 #foreign gdi;
+// GetObjectW :: (h: HANDLE, c: s32, pv: *void) -> s32 #foreign gdi;
 
 DROPFILES :: struct {
     pFiles: DWORD;

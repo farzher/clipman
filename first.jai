@@ -21,11 +21,11 @@ build :: () {
   build_options((options: *Build_Options) {
     build_add_import_dir(options, import_dir);
     options.output_executable_name = exe_name;
-    options.emit_debug_info = .NONE;
 
     #if !RELEASE then options.output_path = "bin/";
     #if !RELEASE then options.backend = .X64;
 
+    #if  RELEASE then options.emit_debug_info = .NONE;
     #if  RELEASE then options.output_path = "release/";
     #if  RELEASE then #run Windows_Resources.disable_runtime_console();
   });

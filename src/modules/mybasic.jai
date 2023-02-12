@@ -17,6 +17,16 @@ mylog :: (args:..Any) {
   print(formatstr, ..args);
 }
 
+_lastmylogms: float64;
+mylogms :: (args: ..Any) {
+  ms := getms() - _lastmylogms;
+
+  print("[%ms] ", formatFloat(ms, trailing_width=2));
+  mylog(..args);
+
+  _lastmylogms = getms();
+}
+
 die :: (args: ..Any) {
   mylog("[Fatal Error]");
   mylog(..args);
@@ -100,6 +110,108 @@ escape :: (str: string) -> string {
 }
 
 
+
+
+
+
+
+
+// NO_CODE :: #code,null;
+// logx :: ($c1:Code=NO_CODE, $c2:Code=NO_CODE, $c3:Code=NO_CODE, $c4:Code=NO_CODE, loc := #caller_location) -> c1.type, c2.type, c3.type, c4.type #expand {
+//   #if c1 == NO_CODE _logx(#procedure_name(), loc); // todo: make a more useful output for when logx is called with no arugments
+//   r1: c1.type; #if #run c1 != NO_CODE  r1 = _logx(c1, loc);
+//   r2: c2.type; #if #run c2 != NO_CODE  r2 = _logx(c2, loc);
+//   r3: c3.type; #if #run c3 != NO_CODE  r3 = _logx(c3, loc);
+//   r4: c4.type; #if #run c4 != NO_CODE  r4 = _logx(c4, loc);
+//   return r1, r2, r3, r4;
+// }
+// _logx :: ($code: Code, loc := #caller_location) -> code.type #expand {
+//   #import "Program_Print";
+//   #import "Compiler";
+//   #import "String";
+
+//   code_string := #insert -> string {
+//     node := compiler_get_nodes(code);
+//     if node.kind == .PROCEDURE_CALL return _logx_procedure_call(node);
+//     else                            return "#run code_to_string(code);";
+//   };
+
+//   result := #insert code;
+//   filename := path_filename(loc.fully_pathed_filename);
+//   if tprint("%", wrap_in_quotes_if_string(result)) != code_string
+//     log("[%:%] % = %", filename, loc.line_number, code_string, wrap_in_quotes_if_string(result));
+//   else
+//     log("[%:%] %", filename, loc.line_number, code_string);
+//   return result;
+
+
+//   _logx_procedure_call :: (root: *Code_Node) -> string {
+//     procedure_node := cast(*Code_Procedure_Call)root;
+
+//     format_str: String_Builder;
+//     args: [..] string;
+//     format_str_for_args: [..] string;
+//     append(*format_str, node_to_string(procedure_node.procedure_expression));
+//     append(*format_str, "(");
+//     for argument: procedure_node.arguments_unsorted {
+//       node := argument.expression;
+//       val := node_to_string(node);
+//       full_argument_name := ifx argument.name then join(argument.name.name, "=") else "";
+//       array_add(*format_str_for_args, join(full_argument_name, "%"));
+//       array_add(*args, tprint("#insert,scope(code) \"wrap_in_quotes_if_string(%);\"", escape(val)));
+//     }
+//     append(*format_str, join(..format_str_for_args, ", "));
+//     append(*format_str, ")");
+
+//     return tprint("tprint(\"%\", %);", escape(builder_to_string(*format_str)), join(..args, ", "));
+//   }
+//   node_to_string :: (node: *Code_Node) -> string #expand {
+//     builder: String_Builder;
+//     print_expression(*builder, node);
+//     return builder_to_string(*builder, allocator=temp);
+//   }
+// }
+// // // logx depends on this
+// // code_to_string :: (code: Code) -> string #expand {
+// //   builder: String_Builder;
+// //   print_expression(*builder, compiler_get_nodes(code));
+// //   return builder_to_string(*builder, allocator=temp);
+// // }
+// // logx depends on this at runtime
+// wrap_in_quotes_if_string :: (thing: $T) -> string {
+//   #if T == string return tprint("\"%\"", escape(thing));
+//   else            return tprint("%", thing);
+// }
+// // logx depends on this at runtime
+// escape :: (str: string) -> string {
+//   if str == "" return "";
+
+//   result: String_Builder;
+//   for i: 0 .. str.count - 1 {
+//     if str[i] == {
+//       case #char "\\"; append(*result, "\\\\");
+//       case #char "\e"; append(*result, "\\e");
+//       case #char "\n"; append(*result, "\\n");
+//       case #char "\r"; append(*result, "\\r");
+//       case #char "\t"; append(*result, "\\t");
+//       case #char "\""; append(*result, "\\\"");
+//       case #char "\0"; append(*result, "\\0");
+//       case;
+//         if str[i] < 32 print_to_builder(*result, "\\x%", formatInt(str[i], 16, 2));
+//         else           append(*result, str[i]);
+//     }
+//   }
+//   return builder_to_string(*result);
+// }
+
+
+
+
+
+
+
+
+
 #scope_file
 Compiler :: #import "Compiler";
 #scope_export
@@ -167,7 +279,13 @@ substr :: inline (str: string, index: int, count: int = 0) -> string #must {
 
   c: string = ---;
   c.data = str.data + index;
-  c.count = count;
+
+  if count < 0 {
+    c.count = str.count + count;
+  } else {
+    c.count = count;
+  }
+
   return c;
 }
 

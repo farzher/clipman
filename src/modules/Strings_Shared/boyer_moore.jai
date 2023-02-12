@@ -783,7 +783,7 @@ boyer_moore_avx2_last_index :: (haystack: string, needle: string, start_index: i
 
 #scope_file
 
-#import,dir "../Strings_Shared";
+// #import,dir "../Strings_Shared";
 
 alphabet_count :: 256;
 max_thread_count :: strings_shared_max_thread_count;

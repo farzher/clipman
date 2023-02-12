@@ -1,8 +1,9 @@
 #load "stuff.jai";
-#import,file "functions.jai";
+using,only(Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, save_bitmap_to_file)
+  Functions :: #import,file "functions.jai";
 
 APP_NAME      :: "ClipMan";
-VERSION       :: "v0.0.0";
+VERSION       :: "v0.0.1";
 CONFIG_PATH   :: "clipman.json";
 
 // default config
@@ -138,7 +139,8 @@ init_db :: (key: string = "") {
        first_seen_at UNSIGNED BIG INT NOT NULL,
        last_seen_at UNSIGNED BIG INT NOT NULL,
        type INTEGER NOT NULL DEFAULT 0,
-       count INTEGER NOT NULL DEFAULT 0
+       count INTEGER NOT NULL DEFAULT 0,
+       bytecount INTEGER NOT NULL DEFAULT 0
     )
   SQL);
 
@@ -167,6 +169,10 @@ init_db :: (key: string = "") {
 
   db.query(#string SQL
     CREATE INDEX IF NOT EXISTS index_preview_hash ON copy (preview_hash)
+  SQL);
+
+  db.query(#string SQL
+    CREATE INDEX IF NOT EXISTS index_bytecount ON copy (bytecount)
   SQL);
 
   // todo do i need an index on preview? wouldn't this make the table twice as big?
@@ -297,7 +303,7 @@ update :: () {
 
           case 517; // right click release
 
-            selection := popup_menu(.["Exit", "Encrypt", "Cleanup Large Clips", "VACUUM DB", "Config / Settings", "Import from Ditto", "Open"]);
+            selection := popup_menu(.["Exit", "Encrypt", "Delete Large Text Clips", "VACUUM DB", "Config / Settings", "Import from Ditto", "Open"]);
             if selection == {
 
               case "Exit"; exit(0);
@@ -316,11 +322,11 @@ update :: () {
 
                 import_from_ditto_db(ditto_filepath);
 
-              case "Cleanup Large Clips";
+              case "Delete Large Text Clips";
                 if config.on_startup_delete_clips_bigger_than {
                   db.query(#string SQL
-                    DELETE FROM copy WHERE length(cast(preview as blob)) > ?
-                  SQL, config.on_startup_delete_clips_bigger_than);
+                    DELETE FROM copy WHERE (type=? or type=?) AND bytecount > ?
+                  SQL, cast(int)COPY_TYPE.TEXT, cast(int)COPY_TYPE.FILE, config.on_startup_delete_clips_bigger_than);
                 }
                 db.query("VACUUM"); // this is slow
 
@@ -345,7 +351,6 @@ update :: () {
             }
 
         }
-        // mylog("idk2", event.mycode);
     }
   }
 
@@ -415,8 +420,11 @@ render :: () {
     render_metadata();
     render_metadata :: () #expand {
       if hover_index == i {
-        text_width := Simp.prepare_text(my_tiny_font, utc_to_time_ago(record.first_seen_at));
-        // text_width := Simp.prepare_text(my_tiny_font, tprint("%", record.last_seen_at));
+        metatext := utc_to_time_ago(record.first_seen_at);
+        if order_by == "bytecount" {
+          metatext = _("bytecount = ${record.bytecount}; ${metatext}");
+        }
+        text_width := Simp.prepare_text(my_tiny_font, metatext);
         Simp.draw_prepared_text(my_tiny_font, window_width-text_width-10, window_height - i*config.record_height - config.record_height+12, COLORS.TEXT);
       }
     }
@@ -426,7 +434,7 @@ render :: () {
     render_lines_of_text_or_img :: () #expand {
 
       // if it's an img, or at least sometimes an img (ex imgur)
-      if record.type == .BITMAP || (hover_index == i && can_fetch_img_from_text(record.preview)) {
+      if record.type == .BITMAP || record.type == .WEBP || (hover_index == i && can_fetch_img_from_text(record.preview)) {
         if is_streamer_mode return;
 
         texture := TextureCache.get_texture_for_record(record);
@@ -598,16 +606,27 @@ update_records :: () {
   records.count = 0;
 
   // reset order back to default if we scroll top the top or start searching
-  if scroll_offset == 0 || search_string.count then order_by = "last_seen_at";
+  if order_by == "bytecount" {
+    if search_string.count then order_by = "last_seen_at";
+  } else {
+    if scroll_offset == 0 || search_string.count then order_by = "last_seen_at";
+  }
 
+  the_select_from :: "select id, preview, last_seen_at, first_seen_at, count, type, bytecount from copy";
   rows: #run type_of(db.select(""));
-  if search_string.count {
+  if starts_with(<<search_string, "id:") {
+    id_str := substr(<<search_string, "id:".count, -"id:".count);
+    id := parse_int(*id_str);
+    if id {
+      rows = db.select(to_c_string(_("${the_select_from} where id=? limit 1"), temp), id);
+    }
+  } else if search_string.count {
     // todo split search into multiples on space
     // map(split(search_string), "preview like '%'||?||'%'"
     // join(, " AND ")
-    rows = db.select(to_c_string(_("select id, preview, last_seen_at, first_seen_at, count, type from copy where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
+    rows = db.select(to_c_string(_("${the_select_from} where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
   } else {
-    rows = db.select(to_c_string(_("select id, preview, last_seen_at, first_seen_at, count, type from copy ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
+    rows = db.select(to_c_string(_("${the_select_from} ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
   }
 
   for row: rows {
@@ -620,6 +639,7 @@ update_records :: () {
     record.first_seen_at = db.get_int(row, 3);
     record.count         = db.get_int(row, 4);
     record.type          = xx db.get_int(row, 5);
+    record.bytecount     = db.get_int(row, 6);
 
     records.count += 1;
     records[it_index] = record;
@@ -645,7 +665,7 @@ do_rightclick :: () #expand {
 
   mouse := Mouse.pos(hwnd);
 
-  selection := popup_menu(.["Delete", "Context", "Save To Downloads"]);
+  selection := popup_menu(.["Delete", "Context", "Save To Downloads", "Sort By Size"]);
   if selection == {
 
     case "Delete"; mylog("delete menu item not yet supported"); return;
@@ -668,18 +688,23 @@ do_rightclick :: () #expand {
       update_records(); // to update records.count; so our selected_index works; i think this will cause us to query twice
       `update_records_handeled = true;
 
+    case "Sort By Size";
+      order_by = "bytecount";
+      update_records();
+
     case "Save To Downloads";
       selected_index = mouse.y/config.record_height;
       if selected_index < 0 then return;
       if selected_index >= records.count then return;
       record := records[selected_index];
       if record.type == {
-        case .BITMAP;
+        case .BITMAP; #through;
+        case .WEBP;
           System :: #import "System";
           // if you call this too quickly (within the same second) filenames will be the same and overwrite ...
           // ^ fixed by using getutcms
           filepath := tprint("C:/Users/%/Downloads/clipman_%.png", System.get_username(), getutcms());
-          success := save_bitmap_to_file(decompress(record.preview), filepath);
+          success := save_bitmap_to_file(record_to_windows_bitmap(record), filepath);
           if !success  mylog("failed to save image");
 
         case; mylog("can only save bitmaps"); return;
@@ -741,17 +766,23 @@ do_submit_selected :: () {
 
   // copy their selection into the clipobard then paste it
   if record.type == {
+
     case .TEXT;   if record.preview.count then os_clipboard_set_text(record.preview);
+
     case .BITMAP; if record.preview.count then os_clipboard_set_bitmap(hwnd, decompress(record.preview));
+    case .WEBP  ; if record.preview.count then os_clipboard_set_bitmap(hwnd, record_to_windows_bitmap(record));
+
     case .FILE;
       push_tallocator();
       filesstr: string;
       for line: Strings.line_split(record.preview) {
         // todo: first_index is broken!!!
         // filesstr = strings_alloc.join(filesstr, Strings.substring(line, first_index(line, " - ")+" - ".count), "\0");
-        filesstr = strings_alloc.join(filesstr, Strings.substring(line, Strings.first_index(line, " - ")+" - ".count), "\0");
+        // filesstr = strings_alloc.join(filesstr, Strings.substring(line, Strings.first_index(line, " - ")+" - ".count), "\0");
+        filesstr = String.join(filesstr, Strings.substring(line, Strings.first_index(line, " - ")+" - ".count), "\0");
       }
       if record.preview.count then os_clipboard_set_file(hwnd, filesstr);
+
   }
   send_paste();
 }
@@ -774,7 +805,8 @@ on_copy :: () {
     for f, i: files {
       files[i] = tprint("% - %", Strings.substring(f, mylastindex(f, #char "\\")+"\\".count), f);
     }
-    str := strings_alloc.join(files, "\n", tallocator);
+    // str := strings_alloc.join(files, "\n", tallocator);
+    str := String.join(..files, separator="\n", allocator=tallocator);
     insert_into_db(str, .FILE);
     update_records();
     return;
@@ -810,15 +842,28 @@ ensure_selection_in_range :: () {
 // sharex screenshot sends 2 copy events, so this is called twice...
 // also every time we paste a clip we copy it first, which would cause duplicates
 // so we need to deduplicate clips
-insert_into_db :: (_str: string, copy_type: COPY_TYPE = .TEXT) {
+insert_into_db :: (_str: string, _copy_type: COPY_TYPE = .TEXT) {
   utc : int = xx getutc();
 
   str := _str; // to make it not immutable
-  if copy_type == .BITMAP then str = compress(str);
+  copy_type := _copy_type; // to make it not immutable
+  if _copy_type == .BITMAP then str = compress(str);
+
+  if_the_image_is_big_compress_it();
+  if_the_image_is_big_compress_it :: () #expand {
+    if _copy_type == .BITMAP {
+      // if str.count > 10000 {
+        webpbytes := windows_bitmap_to_webp(_str, quality=90);
+        if webpbytes.count > str.count return;
+        str = webpbytes;
+        copy_type = .WEBP;
+      // }
+    }
+  }
 
   // if this record has already been inserted, just update it instead of inserting a copy
   existing_record_id: int;
-  if copy_type == .BITMAP {
+  if _copy_type == .BITMAP {
 
     #import "Hash";
     hash : int = sdbm_hash(str.data, str.count);
@@ -832,13 +877,26 @@ insert_into_db :: (_str: string, copy_type: COPY_TYPE = .TEXT) {
   } else {
 
     hash : int = 0;
-    if copy_type == .BITMAP {
+    if _copy_type == .BITMAP {
       hash = sdbm_hash(str.data, str.count);
     }
 
-    success := db.query("INSERT INTO copy (preview, preview_hash, last_seen_at, first_seen_at, type) VALUES (?, ?, ?, ?, ?)", str, hash, utc, utc, cast(int)copy_type);
+    success := db.query("INSERT INTO copy (preview, preview_hash, last_seen_at, first_seen_at, type, bytecount) VALUES (?, ?, ?, ?, ?, ?)", str, hash, utc, utc, cast(int)copy_type, str.count);
     if !success then return;
     total_copy_count += 1;
+  }
+
+  // write the uncompress image into the cache
+  if _copy_type == .BITMAP && copy_type == .WEBP {
+    record_id := existing_record_id;
+    if !record_id {
+      record_id = db.select_int("select last_insert_rowid()");
+    }
+    if !record_id {
+    } else {
+      write_entire_file_to_clipman_cache_temp_folder(_("${record_id}"), compress(_str));
+    }
+
   }
 
   selected_index = 0;
@@ -851,6 +909,7 @@ import_from_ditto_db :: (ditto_filepath: string) {
   mylog("starting ditto import");
 
   ditto :: #import,file "modules/mysqlite3.jai"(id="ditto");
+  for_expansion :: ditto.for_expansion; // gross
 
   #import "File_Utilities";
   if !file_exists(ditto_filepath) {
@@ -906,7 +965,7 @@ import_from_ditto_db :: (ditto_filepath: string) {
 
 // depends on many globals
 config_load :: () {
-  file :: #import "File";
+  using,only(read_entire_file) #import "File";
   json :: #import,dir "modules/json";
 
   // define these globals computed by the newly loaded config data
@@ -923,7 +982,7 @@ config_load :: () {
   }
 
   // read/parse the config file into config
-  file_data, read_success := file.read_entire_file(CONFIG_PATH);
+  file_data, read_success := read_entire_file(CONFIG_PATH);
   if !read_success {is_config_parse_error = true; return; }
 
   parse_success, parsed_config := json.json_parse_string(file_data, type_of(config));
@@ -939,9 +998,9 @@ config_load :: () {
 
 
 
-COPY_TYPE      :: enum u8 {TEXT; FILE; BITMAP;}
+COPY_TYPE      :: enum u8 {TEXT :: 0; FILE :: 1; BITMAP :: 2; WEBP :: 3;}
 
-DbRecord       :: struct {id: int; preview: string; first_seen_at: int; last_seen_at: int; count: int; type: COPY_TYPE; }
+DbRecord       :: struct {id: int; preview: string; first_seen_at: int; last_seen_at: int; count: int; type: COPY_TYPE; bytecount: int; }
 
 MAX_LINE_LEN   :: 200; // only for rendering performance
 MAX_LINE_COUNT :: 60;  // only for rendering performance
@@ -950,6 +1009,8 @@ MAX_LINE_COUNT :: 60;  // only for rendering performance
 // all the junk we depend on
 // all the junk we depend on
 
+// RELEASE :: #run () -> bool {Compiler :: #import "Compiler"; return Compiler.get_build_options().optimization_level == .RELEASE; }();
+// _Basic :: #import "Basic"()(MEMORY_DEBUGGER=!RELEASE);
 #import,file "modules/mybasic.jai";
 #import,file "modules/mywindows.jai";
 #import,file "modules/myclipboard.jai";
@@ -969,6 +1030,7 @@ using,only(ceil) Math :: #import "Math";
 #import,dir "modules/Window_Creation";
 #import "Windows_Utf8";
 
+String        :: #import "String";
 Strings       :: #import,dir "modules/Strings";
-strings_alloc :: #import,dir "modules/Strings_Alloc";
+// strings_alloc :: #import,dir "modules/Strings_Alloc";
 for_expansion :: Strings.for_expansion; // this is gross
