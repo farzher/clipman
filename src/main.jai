@@ -81,7 +81,6 @@ main :: () {
 
 // todo: need a way to edit settings / hotkey / remember password
 // todo: ability to resize the window
-// todo: sort by size? so you can manually remove the big stuff to cleanup
 
 
 

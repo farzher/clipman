@@ -445,8 +445,6 @@ windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
       w := bitmap_header.biWidth;
       stride_padding := bitmap_header.biWidth % 4;
 
-      mylog("wut?", bitmap_pixeldata.count, w*bitmap_header.biHeight);
-
       for y: 0..bitmap_header.biHeight-1 {
         for x: 0..bitmap_header.biWidth-1 {
           push_pixel(
