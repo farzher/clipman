@@ -29,4 +29,4 @@ Download the repo then run `release/clipman.exe`
 - src/main.jai      - the main game loop
 - src/stuff.jai     - just a mess of stuff
 - src/functions.jai - relatively pure dependency free functions
-- src/modules/       - old versions of standard library modules + 3rd party modules + custom modules
+- src/modules/       - old/hacked versions of standard library modules + 3rd party modules + custom modules
