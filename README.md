@@ -7,8 +7,8 @@ Nowhere near as advanced as Ditto, but this does support db encryption https://g
 ![](https://i.imgur.com/gLrmKk0.png)
 
 # Features
-- database password encryption
-- streamer mode - everytime clipman's opened all information is censored until you click or hit tab, yet it's still fully functional
+- database encryption
+- streamer mode - everytime clipman's opened all information is censored until you click or hit tab
 - images compressed using webp to keep the .db file small
 - start typing to filter to clips containing that text
 - right click -> Context - goto the first time a clip was copied to see what else was copied around that same time
