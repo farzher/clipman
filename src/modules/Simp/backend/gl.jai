@@ -24,11 +24,9 @@ backend_init :: (info: *Window_Info) {
             the_gl_context = hglrc;
             the_hdc_for_pixel_format_cloning = hdc;
             info.specific.hdc = hdc;
-        }
-        #if OS == .LINUX {
+        } else #if OS == .LINUX {
             the_gl_context, the_gl_fbc = glx_create_context(MINIMUM_GL_MAJOR_VERSION, MINIMUM_GL_MINOR_VERSION);
-        } 
-        #if OS == .MACOS {
+        } else #if OS == .MACOS {
             the_gl_context = nsgl_create_context(MINIMUM_GL_MAJOR_VERSION, MINIMUM_GL_MINOR_VERSION);
             autorelease(the_gl_context);
         }
@@ -370,12 +368,11 @@ draw_generated_quads :: (font: *Dynamic_Font, color := Vector4.{1, 1, 1, 1}) {
         if page.bitmap_data.width  <= 1 return;
         if page.bitmap_data.height <= 1 return;
 
-        // @Speed: Get rid of these silly make_vector2s.
         using quad;
-        uv0 := make_vector2(u0, v0);
-        uv1 := make_vector2(u1, v0);
-        uv2 := make_vector2(u1, v1);
-        uv3 := make_vector2(u0, v1);
+        uv0 := Vector2.{u0, v0};
+        uv1 := Vector2.{u1, v0};
+        uv2 := Vector2.{u1, v1};
+        uv3 := Vector2.{u0, v1};
         
         immediate_quad(p0, p1, p2, p3, color, uv0, uv1, uv2, uv3);
     }
@@ -386,8 +383,6 @@ draw_generated_quads :: (font: *Dynamic_Font, color := Vector4.{1, 1, 1, 1}) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     
     last_texture: s64 = -1;
-
-    glBegin(GL_TRIANGLES);
 
     for quad, i: quads {
         page := quad.glyph.page;
@@ -402,7 +397,6 @@ draw_generated_quads :: (font: *Dynamic_Font, color := Vector4.{1, 1, 1, 1}) {
             immediate_flush();
             handle := map.gl_handle;
             last_texture = handle;
-            glEnd();
 
             shader := state.current_shader;
             loc := glGetUniformLocation(shader.gl_handle, "text_sampler");
@@ -410,8 +404,6 @@ draw_generated_quads :: (font: *Dynamic_Font, color := Vector4.{1, 1, 1, 1}) {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, handle);  // Bind handle to slot 0.
             glUniform1i(loc, 0);
-                
-            glBegin(GL_TRIANGLES);  // @Speed!
         }
 
         draw_letter_quad(font, quad, color);
@@ -419,7 +411,6 @@ draw_generated_quads :: (font: *Dynamic_Font, color := Vector4.{1, 1, 1, 1}) {
 
     immediate_flush();
     
-    glEnd();
     glDisable(GL_BLEND);
     glDisable(GL_TEXTURE_2D);
 }
@@ -647,7 +638,11 @@ backend_update_texture :: (texture: *Texture, bitmap: *Bitmap) {
     texture_target :: GL_TEXTURE_2D;
     glBindTexture(texture_target, texture.gl_handle);
 
+    bpp := get_image_bytes_per_texel(bitmap.format);
+    stride_in_pixels := ifx bpp then bitmap.stride/bpp else bitmap.width;
+
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, xx stride_in_pixels);
     glTexImage2D(texture_target, 0, xx internal_format, xx bitmap.width, xx bitmap.height, 0, gl_format, gl_type, bitmap.data.data);
 
     //    resource_size := update_texture_2d(map, compressed, gl_format, gl_type, bittexture.data);
@@ -676,6 +671,12 @@ backend_set_texture :: (shader: *Shader, texture: *Texture) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture.gl_handle);  // Bind handle to slot 0.
     glUniform1i(loc, 0);
+
+    // farzher hack
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 backend_resize_render_target :: (info: Window_Info) {

@@ -215,7 +215,8 @@ escape :: (str: string) -> string {
 #scope_file
 Compiler :: #import "Compiler";
 #scope_export
-isrelease :: #run Compiler.get_build_options().optimization_level == .RELEASE;
+// isrelease :: #run Compiler.get_build_options().optimization_level == .RELEASE;
+RELEASE :: #run Compiler.get_build_options().array_bounds_check == .OFF;
 
 tallocator :: __temporary_allocator;
 tfree :: reset_temporary_storage;
@@ -330,9 +331,10 @@ getutcms :: () -> u64 {
 // string interpolation.
 // example: tprinti("hello %{name}") compiles to tprint("hello %", name)
 // perf: is calling append for every single character slow?
-sprinti :: #bake_arguments _(allocator = .{});
-tprinti :: #bake_arguments _(allocator = temp);
-_       :: string_interpolation;
+sprinti :: #bake_arguments interp(allocator = .{});
+tprinti :: #bake_arguments interp(allocator = temp);
+// _       :: string_interpolation;
+interp  :: string_interpolation;
 string_interpolation  :: ($_str: string, allocator: Allocator = temp, caller_scope := #caller_code) -> string #expand {
   a := ifx allocator.proc then allocator else context.allocator;
   push_allocator(a); // sprint doesn't accept an allocator, so we have to push_allocator to the context
@@ -453,6 +455,50 @@ operator []= :: (t: *Table(string, string), index: string, value: string) {;
 
 
 
+OneLine :: ($str: string) -> string {return #run dedent(str, glue=" "); }
+Dedent :: ($str: string) -> string {return #run dedent(str); }
+dedent :: (_str: string, glue := "\n") -> string {
+  #import "String";
+
+  if _str.count == 0 return "";
+
+  // if the last character in the string is a newline, remove the trailing newline
+  str := _str;
+  if str[str.count-1] == #char"\n" str.count -= 1;
+
+  // if there's only 1 line... just return it trimmed
+  lines := split(str, "\n");
+  if lines.count == 1 return trim(lines[0]);
+
+  // figure how much indentation we need to remove from each line
+  min_indent := count_leading_spaces(lines[0]);
+  for line: lines {
+    min_indent = min(min_indent, count_leading_spaces(line));
+  }
+
+  // remove the indentation, build the new string
+  builder: String_Builder;
+  for line: lines {
+    spaces_to_eat := min(line.count, min_indent);
+    append(*builder, slice(line, spaces_to_eat, line.count-spaces_to_eat));
+    if it_index == lines.count-1 break;
+    append(*builder, glue);
+  }
+  return builder_to_string(*builder);
+
+
+  count_leading_spaces :: (str: string) -> int {
+    for i: 0 .. str.count-1 {
+      if str[i] != #char" " return i;
+    }
+    return str.count;
+  }
+}
+
+
+
+
+
 
 
 #if OS == .WINDOWS {
@@ -502,6 +548,17 @@ operator []= :: (t: *Table(string, string), index: string, value: string) {;
 #import "Curl";
 // Allocates response_body using context.allocator
 request :: (url: string, data := "", method := "", headers := string.[], include_headers := false, follow_redirects := true, timeout_seconds := 0) -> response_body: string, response_code: int, curl_code: CURLcode {
+
+    size_t :: u64;
+    write_callback :: (ptr: *u8, size: size_t, nmemb: size_t, userdata: *void) -> size_t #c_call {
+        builder := cast(*String_Builder)userdata;
+        jai_context: Context;
+        push_context jai_context {
+            append(builder, ptr, xx nmemb);
+        }
+        return nmemb;
+    }
+
     curl := curl_easy_init();
     assert(curl != null);
     defer curl_easy_cleanup(curl);
@@ -535,14 +592,4 @@ request :: (url: string, data := "", method := "", headers := string.[], include
     response_body: string = builder_to_string(*builder);
 
     return response_body, response_code, curl_code;
-
-    size_t :: u64;
-    write_callback :: (ptr: *u8, size: size_t, nmemb: size_t, userdata: *void) -> size_t #c_call {
-        builder := cast(*String_Builder)userdata;
-        jai_context: Context;
-        push_context jai_context {
-            append(builder, ptr, xx nmemb);
-        }
-        return nmemb;
-    }
 }

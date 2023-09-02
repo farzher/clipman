@@ -15,10 +15,10 @@ FONT_B_SCALE :: 1 / 10.0;  // 1/10th of the screen height.
 
 main :: () {
     #if OS == .WINDOWS {
+        Windows :: #import "Windows";
         Windows.SetProcessDPIAware();
 
         // Windows is very bad at thread-switching by default unless you do this. Sad.
-        Windows :: #import "Windows";
         Windows.timeBeginPeriod(1);
     }
 
@@ -89,7 +89,7 @@ draw_window_a :: () {
         p.x = cast(float)(window_a_width  / 2);
         p.y = cast(float)(window_a_height / 2);
 
-        theta := cast(float) fmod(time, TAU);    
+        theta := cast(float) fmod_cycling(time, TAU);    
 
         ct := cos(theta);
         st := sin(theta);
@@ -179,7 +179,7 @@ get_timed_hue :: () -> Vector4 {
     
     time := get_time();
 
-    theta := cast(float) fmod(time*3, TAU);    
+    theta := cast(float) fmod_cycling(time*3, TAU);    
     color: Vector4;
     color.x = cos(theta)*.5+.5;
     Clamp(*color.x, 0, 1);

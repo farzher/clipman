@@ -49,6 +49,7 @@ Render_API :: enum {
     #import "X11";
 } else #if OS == .MACOS {
     #import "Objective_C";
+    #import "Objective_C/AppKit";
 }
 
 #if render_api == .OPENGL {
@@ -59,7 +60,7 @@ Render_API :: enum {
 
 #if render_api == .METAL {
     #import "Metal";
-}     
+}
 
 #import "Basic";
 #import "Math";
@@ -81,17 +82,17 @@ set_render_target :: (window: Window_Type) {
 
     immediate_flush();
     backend_flush();
-    
+
     state.current_shader        = null;
     state.texture_render_target = null;
-    
+
     info, added := find_or_add_window_info(window);
     if added {
         update_window(window);
     }
 
     backend_set_render_target(info);
-    
+
     state.current_window_info = << info;
 }
 
@@ -104,7 +105,7 @@ set_render_target :: (texture: *Texture) {
         log_error("Attempt to set_render_target on a null texture!\n");
         return;
     }
-    
+
     immediate_flush();
     backend_flush();
     state.current_shader = null;
@@ -118,7 +119,7 @@ update_window :: (window: Window_Type) {
 
     info := find_or_add_window_info(window);
     if !info return;  // Ignore windows we don't understand.
-    
+
     window_width, window_height := get_render_dimensions(window);
     info.window_width  = window_width;
     info.window_height = window_height;
@@ -136,7 +137,7 @@ update_window :: (window: Window_Type) {
                 if state.current_shader  immediate_set_2d_projection(window_width, window_height);
             }
         }
-        
+
         state.current_window_info = << info;
     }
 }
@@ -164,7 +165,7 @@ Window_Info :: struct {
 
 window_infos: [..] Window_Info;
 
-#scope_export 
+#scope_export
 set_scissor :: (x0: s32, y0: s32, x1: s32, y1: s32) {
     immediate_flush();
     glEnable(GL_SCISSOR_TEST);

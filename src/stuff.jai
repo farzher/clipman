@@ -152,8 +152,8 @@ TextureCache: struct {
 can_fetch_img_from_text :: (str: string) -> bool { return is_imgur_url(str) || is_youtube_url(str) || is_twitch_url(str); }
 get_img_url_from_text :: (str: string) -> string {
   if is_imgur_url(str)   return str;
-  if is_youtube_url(str) return _("https://img.youtube.com/vi/%{youtube_videoid_from_url(str)}/0.jpg");
-  if is_twitch_url(str)  return _("https://static-cdn.jtvnw.net/previews-ttv/live_user_%{twitch_username_from_url(str)}-0x0.jpg");
+  if is_youtube_url(str) return interp("https://img.youtube.com/vi/%{youtube_videoid_from_url(str)}/0.jpg");
+  if is_twitch_url(str)  return interp("https://static-cdn.jtvnw.net/previews-ttv/live_user_%{twitch_username_from_url(str)}-0x0.jpg");
   return "";
 }
 
@@ -426,7 +426,6 @@ windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
     bitmap_pixeldata.count -= pixel_offset;
 
     // if bytes_per_pixel is 3, convert it to 4, so we don't have to worry about 4 byte padding and junk
-    ensure_4_bytes_per_pixel_BGRA_format();
     ensure_4_bytes_per_pixel_BGRA_format :: () #expand {
       if bytes_per_pixel == 4 return;
       assert(bytes_per_pixel == 3);
@@ -458,6 +457,7 @@ windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
       bitmap_pixeldata = xx correct_pixeldata;
       bytes_per_pixel = 4;
     }
+    ensure_4_bytes_per_pixel_BGRA_format();
 
     return bitmap_pixeldata;
   })();
@@ -535,7 +535,7 @@ pixels_to_windows_bitmap :: (pixels: string, width: s32, height: s32) -> string 
 record_to_windows_bitmap :: (record: DbRecord) -> string {
   if record.type == .BITMAP return decompress(record.preview);
 
-  cached_bitmap := read_entire_file_from_clipman_cache_temp_folder(_("${record.id}"));
+  cached_bitmap := read_entire_file_from_clipman_cache_temp_folder(interp("${record.id}"));
   if cached_bitmap.count return decompress(cached_bitmap);
   if record.type == .WEBP return webp_to_windows_bitmap(record.preview);
 
@@ -558,9 +558,9 @@ read_entire_file_from_clipman_cache_temp_folder :: (name: string) -> bytes: stri
   }
 
   temp_folder_path := to_string(temp);
-  clipman_cache_path := _("${temp_folder_path}/clipman");
+  clipman_cache_path := interp("${temp_folder_path}/clipman");
   make_directory_if_it_does_not_exist(clipman_cache_path);
-  return read_entire_file(_("${clipman_cache_path}/${name}"));
+  return read_entire_file(interp("${clipman_cache_path}/${name}"));
 }
 write_entire_file_to_clipman_cache_temp_folder :: (name: string, data: string) {
   temp := getenv("temp");
@@ -570,7 +570,7 @@ write_entire_file_to_clipman_cache_temp_folder :: (name: string, data: string) {
   }
 
   temp_folder_path := to_string(temp);
-  clipman_cache_path := _("${temp_folder_path}/clipman");
+  clipman_cache_path := interp("${temp_folder_path}/clipman");
   make_directory_if_it_does_not_exist(clipman_cache_path);
-  write_entire_file(_("${clipman_cache_path}/${name}"), data);
+  write_entire_file(interp("${clipman_cache_path}/${name}"), data);
 }

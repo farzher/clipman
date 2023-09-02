@@ -2654,6 +2654,14 @@ for_expansion :: (splitter: *Split_By_Count, body: Code, flags: For_Flags) #expa
 
 
 for_expansion :: (splitter: *Split_By_Line, body: Code, flags: For_Flags) #expand {
+
+    it_is_empty :: () -> bool #expand {
+        if `splitter.keep_separator != .NO
+            return `it == "" || `it.count == 1 || `it.count == 2 && `it[0] == Chars.CR;
+        else
+            return `it == "";
+    }
+
 	#assert(!(flags & .POINTER));
     reverse := flags & .REVERSE;
 
@@ -2775,13 +2783,6 @@ for_expansion :: (splitter: *Split_By_Line, body: Code, flags: For_Flags) #expan
                 }
             }
         }
-    }
-
-    it_is_empty :: () -> bool #expand {
-        if `splitter.keep_separator != .NO
-            return `it == "" || `it.count == 1 || `it.count == 2 && `it[0] == Chars.CR;
-        else
-            return `it == "";
     }
 }
 

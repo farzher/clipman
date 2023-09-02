@@ -14,10 +14,10 @@ render_target_b: *Simp.Texture;
 
 main :: () {
     #if OS == .WINDOWS {
+        Windows :: #import "Windows";
         Windows.SetProcessDPIAware();
 
         // Windows is very bad at thread-switching by default unless you do this. Sad.
-        Windows :: #import "Windows";
         Windows.timeBeginPeriod(1);
     }
 
@@ -81,7 +81,7 @@ render_texture_1 :: () {
         p.x = cast(float)(rw  / 2);
         p.y = cast(float)(rh / 2);
 
-        theta := cast(float) fmod(time, TAU);    
+        theta := cast(float) fmod_cycling(time, TAU);    
 
         ct := cos(theta);
         st := sin(theta);
@@ -124,7 +124,7 @@ render_texture_2 :: () {
         time := get_time();
         b0 := rh / 10.0;
         b1 := rh / 1.0;
-        theta := cast(float) fmod(time, TAU);    
+        theta := cast(float) fmod_cycling(time, TAU);    
         factor := cos(theta);
         factor *= factor;
         b := lerp(b0, b1, factor);
@@ -179,7 +179,7 @@ draw_one_frame :: () {
     offset := make_vector3(margin_x, margin_y, 0);
 
     time := get_time();
-    theta := cast(float) fmod(time * .13, TAU); 
+    theta := cast(float) fmod_cycling(time * .13, TAU); 
     offset.xy = rotate(offset.xy, theta);
     
     x0 := (window_width - rt_width)   * .5 - offset.x;

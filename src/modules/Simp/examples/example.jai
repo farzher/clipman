@@ -8,10 +8,10 @@ screenshot_index := 0;
 
 main :: () {
     #if OS == .WINDOWS {
+        Windows :: #import "Windows";
         Windows.SetProcessDPIAware();
 
         // Windows is very bad at thread-switching by default unless you do this. Sad.
-        Windows :: #import "Windows";
         Windows.timeBeginPeriod(1);
     }
 
@@ -109,7 +109,7 @@ draw_one_frame :: () {
         p.x = cast(float)(window_width  / 2);
         p.y = cast(float)(window_height / 2);
 
-        theta := cast(float) fmod(time, TAU);    
+        theta := cast(float) fmod_cycling(time, TAU);    
 
         ct := cos(theta);
         st := sin(theta);
@@ -134,7 +134,7 @@ draw_one_frame :: () {
     // Draw some text.
     {
         // Do a bunch of wacky math to figure out the text color.
-        theta := cast(float) fmod(time*3, TAU);    
+        theta := cast(float) fmod_cycling(time*3, TAU);    
         color: Vector4;
         color.x = cos(theta)*.5+.5;
         Clamp(*color.x, 0, 1);

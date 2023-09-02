@@ -64,6 +64,14 @@ bitmap_load_from_memory :: (bitmap: *Bitmap, memory: [] u8) -> bool {
         log("Tried to load a bitmap from memory, but it's too big! (2GB max for now).\n", flags=.ERROR);
         return false;
     }
+
+    //
+    // @Speed: We have an extra copy here of the whole bitmap, because
+    // we want to return a Bitmap that uses a system allocator, but
+    // stbi needs us to do stbi_image_free. Maybe there's a way that we can give a newer version of
+    // stbi our own output buffer and we just don't export that method from modules/stb_image...
+    // this would be very nice to fix!
+    //
     
     w, h, channels: s32;
     data := stbi_load_from_memory(memory.data, count32, *w, *h, *channels, 0);
@@ -92,18 +100,25 @@ bitmap_save :: (bitmap: *Bitmap, filepath: string, save_alpha := false) -> bool 
     
     name      := temp_c_string(filepath);
     extension := path_extension(filepath);
+
+    if extension != "png" {
+        expected := bitmap.width*components;
+        if bitmap.stride != expected {
+            log_error("When saving '%', the supported file format does not support a custom stride. The stride given in the bitmap is %, which does not match the expected stride %, so bad things may happen now.\n", filepath, bitmap.stride, expected);
+        }
+    }
     
     if extension == {
         case "png"; 
             return stbi_write_png(name, bitmap.width, bitmap.height, components, data, stride) != 0;
         case "tga";
-            return stbi_write_tga(name, bitmap.width, bitmap.height, components, data, stride) != 0;
+            return stbi_write_tga(name, bitmap.width, bitmap.height, components, data) != 0;
         case "bmp";
-            return stbi_write_bmp(name, bitmap.width, bitmap.height, components, data, stride) != 0;
+            return stbi_write_bmp(name, bitmap.width, bitmap.height, components, data) != 0;
         case "hdr";
-            return stbi_write_hdr(name, bitmap.width, bitmap.height, components, data, stride) != 0;
+            return stbi_write_hdr(name, bitmap.width, bitmap.height, components, data) != 0;
         case "jpg";
-            return stbi_write_jpg(name, bitmap.width, bitmap.height, components, data, stride, quality=80) != 0;
+            return stbi_write_jpg(name, bitmap.width, bitmap.height, components, data, quality=80) != 0;
         case;
             log("Bitmap extension '%' is not understood by this code.", extension, flags=.ERROR);
             return false;
@@ -209,13 +224,5 @@ bitmap_load_part_2 :: (bitmap: *Bitmap, data: *u8, w: s32, h: s32, channels: s32
 
     bitmap_alloc(bitmap, w, h, format);
 
-    // memcpy(bitmap.data.data, data, bitmap.stride*bitmap.height);
-    // Copy one row at a time to flip the image because THEY ALWAYS LOAD UPSIDE DOWN!?!?!?
-    dest   := bitmap.data.data;
-    source := data;
-    for i: 0..h-1 {
-        memcpy(dest + (bitmap.stride*(h-1-i)), source + (w * channels * i), bitmap.width * channels);
-    }
+    memcpy(bitmap.data.data, data, bitmap.stride*bitmap.height);
 }
-
-

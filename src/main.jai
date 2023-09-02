@@ -42,11 +42,12 @@ main :: () {
 
   // create the main window
   hwnd = create_window(
-    window_name=#run _("%{APP_NAME} %{VERSION}"),
-    width=window_width, height=window_height,
-    background_color_rgb=COLORS.to_3f(COLORS.DARK),
-    style=WS_POPUP,
-    style_ex=WS_EX_LAYERED | WS_EX_TOOLWINDOW
+    window_name          = #run interp("%{APP_NAME} %{VERSION}"),
+    width                = window_width,
+    height               = window_height,
+    background_color_rgb = COLORS.to_3f(COLORS.DARK),
+    style                = WS_POPUP,
+    style_ex             = WS_EX_LAYERED | WS_EX_TOOLWINDOW
   );
   set_window_pos_to_mouse(hwnd);
   show_window(false);
@@ -65,7 +66,7 @@ main :: () {
   init_everything();
 
   // create tray icon
-  trayicon_create(tooltip=#run _("%{APP_NAME} %{VERSION}"));
+  trayicon_create(tooltip=#run interp("%{APP_NAME} %{VERSION}"));
 
   // main game loop
   while 1 {
@@ -183,7 +184,7 @@ init_db :: (key: string = "") {
   total_copy_count = db.select_int("select count(1) from copy");
 
   if !is_db_locked && total_copy_count==0 {
-    insert_into_db(#run _(#string STR
+    insert_into_db(#run interp(#string STR
       %{APP_NAME} %{VERSION} by farzher
       Alt + ` (backtick/tilde ~) to toggle
       Hover over the right half of this clip to expand it
@@ -394,7 +395,6 @@ render :: () {
   i := records.count-1; while i >= 0 { defer i -= 1;
     record := records[i];
 
-    render_record_background();
     render_record_background :: () #expand {
 
       background_color := COLORS.DARK;
@@ -415,21 +415,21 @@ render :: () {
       Simp.set_shader_for_color();
       Simp.immediate_quad(cast(float)0, window_height - cast(float)i*config.record_height, cast(float)window_width, window_height - cast(float)i*config.record_height-record_height, background_color);
     }
+    render_record_background();
 
-    render_metadata();
     render_metadata :: () #expand {
       if hover_index == i {
         metatext := utc_to_time_ago(record.first_seen_at);
         if order_by == "bytecount" {
-          metatext = _("bytecount = ${record.bytecount}; ${metatext}");
+          metatext = interp("bytecount = ${record.bytecount}; ${metatext}");
         }
         text_width := Simp.prepare_text(my_tiny_font, metatext);
         Simp.draw_prepared_text(my_tiny_font, window_width-text_width-10, window_height - i*config.record_height - config.record_height+12, COLORS.TEXT);
       }
     }
+    render_metadata();
 
 
-    render_lines_of_text_or_img();
     render_lines_of_text_or_img :: () #expand {
 
       // if it's an img, or at least sometimes an img (ex imgur)
@@ -447,7 +447,14 @@ render :: () {
         width := texture.width * ratio;
         height := texture.height * ratio;
         Simp.set_shader_for_images(texture);
-        Simp.immediate_quad(x, y, x + width, y - height, COLORS.WHITE);
+
+        // why are these different?????????? one of them is upside down. i don't get it
+        if record.type == .BITMAP || record.type == .WEBP {
+          Simp.immediate_quad(x, y, x + width, y - height, COLORS.WHITE);
+        } else {
+          Simp.immediate_quad(x, y - height, x + width, y, COLORS.WHITE);
+        }
+
         return;
       }
 
@@ -497,12 +504,12 @@ render :: () {
 
       }
     }
+    render_lines_of_text_or_img();
   }
 
-  render_errors();
   render_errors :: () #expand {
     if is_config_parse_error {
-      for line, line_i: string.["CONFIG IS CORRUPT", #run _("Fix or delete your %{CONFIG_PATH} file")] {
+      for line, line_i: string.["CONFIG IS CORRUPT", #run interp("Fix or delete your %{CONFIG_PATH} file")] {
         text_width := Simp.prepare_text(my_font, line);
         Simp.draw_prepared_text(my_font, (window_width-text_width)/2, window_height - (my_font.character_height*(2+line_i)), COLORS.TEXT);
       }
@@ -518,9 +525,9 @@ render :: () {
       }
     }
   }
+  render_errors();
 
 
-  render_search_string();
   render_search_string :: () #expand {
     ms := getms();
     if ms - search_input.last_keypress_time >= 1000 then return;
@@ -555,9 +562,9 @@ render :: () {
     //   }
     // }
   }
+  render_search_string();
 
 
-  render_scroll_bar();
   render_scroll_bar :: () #expand {
     if scroll_offset > 0 && total_copy_count>0 {
       scroll_percent := cast(float)(scroll_offset + records.count) / total_copy_count;
@@ -574,6 +581,7 @@ render :: () {
       }
     }
   }
+  render_scroll_bar();
 
   Simp.swap_buffers(hwnd);
   DwmFlush(); // simp opengl vsync burns 100% cpu without this
@@ -617,15 +625,15 @@ update_records :: () {
     id_str := substr(<<search_string, "id:".count, -"id:".count);
     id := parse_int(*id_str);
     if id {
-      rows = db.select(to_c_string(_("${the_select_from} where id=? limit 1"), temp), id);
+      rows = db.select(to_c_string(interp("${the_select_from} where id=? limit 1"), temp), id);
     }
   } else if search_string.count {
     // todo split search into multiples on space
     // map(split(search_string), "preview like '%'||?||'%'"
     // join(, " AND ")
-    rows = db.select(to_c_string(_("${the_select_from} where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
+    rows = db.select(to_c_string(interp("${the_select_from} where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, <<search_string, max_records, scroll_offset);
   } else {
-    rows = db.select(to_c_string(_("${the_select_from} ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
+    rows = db.select(to_c_string(interp("${the_select_from} ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
   }
 
   for row: rows {
@@ -848,7 +856,6 @@ insert_into_db :: (_str: string, _copy_type: COPY_TYPE = .TEXT) {
   copy_type := _copy_type; // to make it not immutable
   if _copy_type == .BITMAP then str = compress(str);
 
-  if_the_image_is_big_compress_it();
   if_the_image_is_big_compress_it :: () #expand {
     if _copy_type == .BITMAP {
       // if str.count > 10000 {
@@ -859,6 +866,7 @@ insert_into_db :: (_str: string, _copy_type: COPY_TYPE = .TEXT) {
       // }
     }
   }
+  if_the_image_is_big_compress_it();
 
   // if this record has already been inserted, just update it instead of inserting a copy
   existing_record_id: int;
@@ -893,7 +901,7 @@ insert_into_db :: (_str: string, _copy_type: COPY_TYPE = .TEXT) {
     }
     if !record_id {
     } else {
-      write_entire_file_to_clipman_cache_temp_folder(_("${record_id}"), compress(_str));
+      write_entire_file_to_clipman_cache_temp_folder(interp("${record_id}"), compress(_str));
     }
 
   }
@@ -903,6 +911,24 @@ insert_into_db :: (_str: string, _copy_type: COPY_TYPE = .TEXT) {
 }
 
 import_from_ditto_db :: (ditto_filepath: string) {
+
+  tmp_insert_into_db :: (str: string, first_seen_at: int, last_seen_at: int, copy_type: COPY_TYPE = .TEXT) -> success: bool {
+    exists_id: int = db.select_int("select id from copy where preview = ? and type=? limit 1", str, cast(int)copy_type);
+
+    if exists_id return false;
+
+    success := db.query("INSERT INTO copy (preview, last_seen_at, first_seen_at, type) VALUES (?, ?, ?, ?)", str, last_seen_at, first_seen_at, cast(int)copy_type);
+    if !success then {
+      mylog("!success", first_seen_at);
+      return false;
+    }
+
+    total_copy_count += 1;
+    selected_index = 0;
+    scroll_offset = 0;
+    return true;
+  }
+
   MAXIMUM_CLIP_LENGTH :: 10_000;
 
   mylog("starting ditto import");
@@ -935,23 +961,6 @@ import_from_ditto_db :: (ditto_filepath: string) {
 
     inserted := tmp_insert_into_db(ooData, first_seen_at, last_seen_at);
     if inserted mylog(ooData);
-  }
-
-  tmp_insert_into_db :: (str: string, first_seen_at: int, last_seen_at: int, copy_type: COPY_TYPE = .TEXT) -> success: bool {
-    exists_id: int = db.select_int("select id from copy where preview = ? and type=? limit 1", str, cast(int)copy_type);
-
-    if exists_id return false;
-
-    success := db.query("INSERT INTO copy (preview, last_seen_at, first_seen_at, type) VALUES (?, ?, ?, ?)", str, last_seen_at, first_seen_at, cast(int)copy_type);
-    if !success then {
-      mylog("!success", first_seen_at);
-      return false;
-    }
-
-    total_copy_count += 1;
-    selected_index = 0;
-    scroll_offset = 0;
-    return true;
   }
 
   mylog("ditto import finished");
