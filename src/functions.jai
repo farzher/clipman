@@ -159,11 +159,23 @@ compress :: (str: string) -> string {
   compressed.count = bytes_written;
   return compressed;
 }
+// decompress is one of the most common reasons this app crashes.
+// either because we didn't allocate enough bytes, or because we're decompressing an empty string
+// so now this function deals with those cases
+decompress_high_watermark := 1024 * 1024;
 decompress :: (compressed: string) -> string {
-  decompressed := talloc_string(1024 * 1024 * 75 /*75mb is the max we can decompress. 4k monitor screenshots are like 32MB a picture from my phone was crashing at 60mb ... */);
-  // decompressed := talloc_string(1024 * 1024 * 200 /*200mb is the max we can decompress. 4k monitor screenshots are like 32MB a picture from my phone was crashing at 60mb ... */);
+  if(compressed == "") return "";
+
+  decompressed := talloc_string(decompress_high_watermark);
   bytes_written := LZ4_decompress_safe(compressed.data, decompressed.data, xx compressed.count, xx decompressed.count);
-  if bytes_written <= 0  die("decompress error");
+
+  if bytes_written <= 0 {
+    // error. we probably didn't allocate enough space. let's allocate more and try again
+    // it's possible the compressed string is corrupt? in that case we'd allocate more and more until we crash ...
+    decompress_high_watermark *= 2;
+    return decompress(compressed);
+  }
+
   decompressed.count = bytes_written;
   return decompressed;
 }
