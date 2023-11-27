@@ -407,6 +407,8 @@ mylastindex :: (str: string, char: u8) -> int {
 // cf_dib is the raw contents of GetClipboardData(CF_DIB)
 // try to parse this thing into a simp bitmap
 windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
+  if(cf_dib == "") return .{};
+
   BI_BITFIELDS :: 3;
 
   bitmap_header: *BITMAPINFOHEADER = xx cf_dib.data;
