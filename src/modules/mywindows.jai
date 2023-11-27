@@ -203,6 +203,13 @@ LPVOID :: *void;
 CreateDIBitmap :: (hdc: HDC, pbmih: *BITMAPINFOHEADER, flInit: DWORD, pjBits: *void, pbmi: *BITMAPINFO, iUsage: u32) -> HBITMAP #foreign gdi;
 GetDIBits :: (hdc: HDC, hbm: HBITMAP, start: u32, cLines: u32, lpvBits: LPVOID, BITMAPINFO_ptr: *void, usage: u32) -> s32 #foreign gdi;
 
+_dup :: (fd: s32) -> s32 #foreign Crt;
+_dup2 :: (oldfd: s32, newfd: s32) -> s32 #foreign Crt;
+FILE :: *void;
+fopen_s :: (file: FILE, filename: *u8, mode: *u8) -> s32 #foreign Crt;
+_fileno :: (file: FILE) -> s32 #foreign Crt;
+fseek  :: (stream: FILE, offset: s64, whence: s32) -> s32 #foreign Crt;
+
 #scope_file
 ntdll       :: #system_library "Ntdll";
 kernel32    :: #system_library "kernel32";
