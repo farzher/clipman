@@ -310,15 +310,12 @@ update :: () {
 
 
       case .MOUSE_WHEEL; // mouse wheel scrolling
-        total_wheel_delta += event.wheel_delta;
         SCROLL_SPEED :: 100;
-        if total_wheel_delta >= SCROLL_SPEED || total_wheel_delta <= -SCROLL_SPEED {
-          scroll_count := total_wheel_delta / SCROLL_SPEED;
-          total_wheel_delta -= scroll_count * SCROLL_SPEED;
-
-          scroll_offset += -scroll_count;
+        total_wheel_delta += event.wheel_delta;
+        while abs(total_wheel_delta) >= SCROLL_SPEED {
+          scroll_offset     -= ifx total_wheel_delta > 0 then 1 else -1;
+          total_wheel_delta += ifx total_wheel_delta > 0 then -SCROLL_SPEED else SCROLL_SPEED;
         }
-        total_wheel_delta = 0;
 
 
       case .MY_TRAY;
@@ -1057,7 +1054,7 @@ COLORS :: #import,dir "modules/colors";
 
 Simp :: #import "Simp";
 
-using,only(ceil) Math :: #import "Math";
+using,only(ceil,abs) Math :: #import "Math";
 
 // #import,dir "modules/Input";
 #import "Input"; // we need to use this normal style of import so we import the same Input as getrect
