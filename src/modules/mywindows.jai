@@ -210,6 +210,8 @@ fopen_s :: (file: FILE, filename: *u8, mode: *u8) -> s32 #foreign Crt;
 _fileno :: (file: FILE) -> s32 #foreign Crt;
 fseek  :: (stream: FILE, offset: s64, whence: s32) -> s32 #foreign Crt;
 
+VkKeyScanA :: (ch: u8) -> u16 #foreign user32;
+
 #scope_file
 ntdll       :: #system_library "Ntdll";
 kernel32    :: #system_library "kernel32";

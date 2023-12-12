@@ -1,9 +1,9 @@
 #load "stuff.jai";
-using,only(Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, save_bitmap_to_file)
+using,only(Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, save_bitmap_to_file, myregisterhotkey)
   Functions :: #import,file "functions.jai";
 
 APP_NAME      :: "ClipMan";
-VERSION       :: "v0.0.1";
+VERSION       :: "v0.0.2";
 CONFIG_PATH   :: "clipman.json";
 
 // default config
@@ -13,12 +13,11 @@ config: struct {
   window_height     : int    = 840;
   record_height     : int    = 70;
   record_lines      : int    = 3;
-  hotkey_mod        : int    = MOD_ALT | MOD_NOREPEAT;
-  hotkey_key        : int    = 0xc0/*tilde `*/;
   transparency      : int    = 90;
   streamer_mode     : int    = 0; // for privacy. won't render clips unless you take an extra action. 0 to disable
   on_startup_open   : int    = 1;
-  on_startup_delete_clips_bigger_than   : int = 10000;
+  large_text_clips  : int    = 10000; // Delete Large Text Clips will only delete clips at least this large
+  hotkey            : string = "alt+`";
   db_name           : string = "clipman.db";
   remember_password : string = "";
 }
@@ -54,7 +53,9 @@ main :: () {
   if config.on_startup_open then show_window(true); // need to call show_window even if it was already visible, to trigger streamer_mode stuff
 
   // register our global show hide hotkey
-  RegisterHotKey(hwnd, 0, xx config.hotkey_mod, xx config.hotkey_key);
+  // todo it would probably be smarter to let them register the hotkey
+  // by pressing it instead of typing its string name into config file
+  myregisterhotkey(hwnd, 0, config.hotkey);
 
   // need this to receive clipboard copy events
   AddClipboardFormatListener(hwnd);
@@ -81,21 +82,23 @@ main :: () {
 }
 
 // todo: need a way to edit settings / hotkey / remember password
+// ^ this stuff now exists but isn't great. would be nice if i could
+// just type out the hotkey instead of having to spell it out in the config file
 // todo: ability to resize the window
 
 
 
-selected_index: int;
-selected_index_end: int = -1;
-scroll_offset: int;
+selected_index        : int;
+selected_index_end    : int = -1;
+scroll_offset         : int;
 
-records: [..] DbRecord;
-total_copy_count: int;
-total_wheel_delta: int;
+records               : [..] DbRecord;
+total_copy_count      : int;
+total_wheel_delta     : int;
 
-is_streamer_mode: bool;
-is_db_locked: bool;
-is_config_parse_error: bool;
+is_streamer_mode      : bool;
+is_db_locked          : bool;
+is_config_parse_error : bool;
 
 order_by := "last_seen_at";
 
@@ -347,10 +350,10 @@ update :: () {
                 import_from_ditto_db(ditto_filepath);
 
               case "Delete Large Text Clips";
-                if config.on_startup_delete_clips_bigger_than {
+                if config.large_text_clips {
                   db.query(#string SQL
                     DELETE FROM copy WHERE (type=? or type=?) AND bytecount > ?
-                  SQL, cast(int)COPY_TYPE.TEXT, cast(int)COPY_TYPE.FILE, config.on_startup_delete_clips_bigger_than);
+                  SQL, cast(int)COPY_TYPE.TEXT, cast(int)COPY_TYPE.FILE, config.large_text_clips);
                 }
                 db.query("VACUUM"); // this is slow
 
