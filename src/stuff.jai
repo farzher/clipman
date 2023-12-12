@@ -309,6 +309,11 @@ selected_range :: () -> min: int, max: int {
   if !multiselecting() return selected_index, selected_index;
   return min(selected_index, selected_index_end), max(selected_index, selected_index_end);
 }
+selected_count :: () -> int {
+  min, max := selected_range();
+  count := (max - min) + 1;
+  return count;
+}
 
 selected_expansion: struct {};
 for_expansion :: (_: *type_of(selected_expansion), body: Code, flags: For_Flags) #expand {

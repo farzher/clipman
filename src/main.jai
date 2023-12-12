@@ -699,7 +699,7 @@ do_rightclick :: () #expand {
   selection := popup_menu(.["Delete", "Context", "Save To Downloads", "Sort By Size"]);
   if selection == {
 
-    case "Delete"; mylog("delete menu item not yet supported"); return;
+    case "Delete"; do_delete();
 
     case "Context";
       // if search_string.count == 0 then return;
@@ -748,7 +748,8 @@ do_rightclick :: () #expand {
 do_delete :: () {
   ignore_next_blur = true;
 
-  response := MessageBoxW(null, utf8_to_wide("Are you sure you want to delete this?"), utf8_to_wide("Delete Record"), MB_OKCANCEL | MB_TOPMOST);
+  message := ifx multiselecting() interp("Are you sure you want to delete these #{selected_count()} clips?") else "Are you sure you want to delete this clip?";
+  response := MessageBoxW(null, utf8_to_wide(message), utf8_to_wide("Delete Record"), MB_OKCANCEL | MB_TOPMOST);
   if response != IDOK then return;
 
   for selected_expansion {
