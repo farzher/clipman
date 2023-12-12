@@ -310,7 +310,7 @@ update :: () {
 
 
       case .MOUSE_WHEEL; // mouse wheel scrolling
-        SCROLL_SPEED :: 100;
+        SCROLL_SPEED :: 120; // my mouse scrolls at 120 per click. logitech g600
         total_wheel_delta += event.wheel_delta;
         while abs(total_wheel_delta) >= SCROLL_SPEED {
           scroll_offset     -= ifx total_wheel_delta > 0 then 1 else -1;
