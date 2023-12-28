@@ -23,7 +23,7 @@ config: struct {
 }
 
 // these values are calculated based on the config data
-// (this actual window_height may not be exactly config.window_height)
+// (this actual window_height may not be exactly what config.window_height wanted)
 window_width  : int; // defined by config_load
 window_height : int; // defined by config_load
 max_records   : int; // defined by config_load
@@ -32,6 +32,14 @@ max_records   : int; // defined by config_load
 visible := true;
 hwnd    : HWND;
 
+
+ONLY_RENDER_WHEN_CHANGED :: true;
+#if ONLY_RENDER_WHEN_CHANGED {
+  render_dirty_info: struct {
+    new_event: bool;
+    hover_index: int; // mousemove is current not an event. so we have to track if the mouse position would actually change anything
+  }
+}
 
 
 main :: () {
@@ -235,8 +243,11 @@ update :: () {
 
   update_records_handeled := false;
 
+  #if ONLY_RENDER_WHEN_CHANGED render_dirty_info.new_event = false;
   update_window_events(); for * event : events_this_frame {
     // if event.shift_pressed then mylog(event.*);
+
+    #if ONLY_RENDER_WHEN_CHANGED render_dirty_info.new_event = true;
 
     // exit when you close the window or hit F5
     if event.type == .QUIT || event.key_code == .F5 then exit(0);
@@ -400,9 +411,6 @@ update :: () {
 
 
 
-
-
-
 render :: () {
 
   // if you're hovering over the right side of a record
@@ -414,6 +422,14 @@ render :: () {
     is_mouse_in_window := !(mouse.x < 0 || mouse.x > window_width || mouse.y < 0 || mouse.y > window_height);
     is_mouse_in_right_half := is_mouse_in_window && mouse.x >= window_width/4;
     hover_index = ifx is_mouse_in_right_half then mouse.y/config.record_height else -1;
+  }
+
+  #if ONLY_RENDER_WHEN_CHANGED {
+    defer render_dirty_info.hover_index = hover_index;
+    if render_dirty_info.hover_index == hover_index && !render_dirty_info.new_event {
+      sleep_milliseconds(1);
+      return;
+    }
   }
 
   update_window_transparency(can_be_transparent=hover_index == -1);

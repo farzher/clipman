@@ -7,14 +7,14 @@
 using #import "Basic";
 
 #import "String";
-mylog :: (args:..Any) {
-  if args.count == 0 { print("\n"); return; }
+mylog :: (args:..Any, to_standard_error := false) {
+  if args.count == 0 { print("\n", to_standard_error=to_standard_error); return; }
 
   formatstr: string;
   push_tallocator();
   for args  formatstr = join(formatstr, "% ");
   formatstr[formatstr.count-1] = #char "\n"; // replace the trailing space with a newline
-  print(formatstr, ..args);
+  print(formatstr, ..args, to_standard_error=to_standard_error);
 }
 
 _lastmylogms: float64;
@@ -28,8 +28,8 @@ mylogms :: (args: ..Any) {
 }
 
 die :: (args: ..Any) {
-  mylog("[Fatal Error]");
-  mylog(..args);
+  mylog("[Fatal Error]", to_standard_error=true);
+  mylog(..args, to_standard_error=true);
   exit(1);
 }
 
@@ -429,7 +429,7 @@ embed_file :: (file_path: string) -> []u8 {
 
 Global :: (code: Code) #expand {
   Compiler :: #import "Compiler";
-  #run Compiler.add_build_string(tprint("%;", code_to_string(code)));
+  #run Compiler.add_build_string(tprint("%;", code_to_string(code)), -1);
 }
 
 code_to_string :: (code: Code) -> string #expand {
