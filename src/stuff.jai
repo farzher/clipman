@@ -88,6 +88,7 @@ request_q: struct {
 
     req.response = request(req.url, timeout_seconds=2);
     req.status = .DONE;
+    #if ONLY_RENDER_WHEN_CHANGED render_dirty_info.new_event = true;
 
     return .CONTINUE;
   }

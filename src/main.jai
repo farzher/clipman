@@ -243,11 +243,9 @@ update :: () {
 
   update_records_handeled := false;
 
-  #if ONLY_RENDER_WHEN_CHANGED render_dirty_info.new_event = false;
+  #if ONLY_RENDER_WHEN_CHANGED if events_this_frame.count render_dirty_info.new_event = true;
   update_window_events(); for * event : events_this_frame {
     // if event.shift_pressed then mylog(event.*);
-
-    #if ONLY_RENDER_WHEN_CHANGED render_dirty_info.new_event = true;
 
     // exit when you close the window or hit F5
     if event.type == .QUIT || event.key_code == .F5 then exit(0);
@@ -430,6 +428,7 @@ render :: () {
       sleep_milliseconds(1);
       return;
     }
+    render_dirty_info.new_event = false; // set new_event as false when we render
   }
 
   update_window_transparency(can_be_transparent=hover_index == -1);
