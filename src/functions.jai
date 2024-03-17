@@ -8,6 +8,7 @@
 
 
 // #load "modules/mybasic.jai";
+#import "Basic";
 #import,file "modules/mybasic.jai";
 #import,file "modules/mywindows.jai";
 #import "Window_Creation";

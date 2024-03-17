@@ -281,9 +281,16 @@ init_font :: () {
 }
 
 
+get_ms_since_last_interaction :: () -> float64 {
+  if !last_interation_time return 0;
+  return get_ms() - last_interation_time;
+}
+last_interation_time: float64;
 
 show_window :: (_visible := true) {
   visible = _visible;
+  last_interation_time = get_ms();
+  if !visible lru_free(*TextureCache.texture_cache);
   ShowWindow(hwnd, xx ifx visible then SW_SHOW else SW_HIDE);
   if !visible then Simp.swap_buffers(hwnd); // ensure streamer mode doesn't render old information
   if visible then  SetForegroundWindow(hwnd); // ensure window has focus
@@ -368,7 +375,7 @@ trayicon_create :: (tooltip: string) {
 popup_menu :: (items: []string) -> string {
   hpop := CreatePopupMenu();
   for item, item_i: items {
-    InsertMenuW(hpop, 0, MF_BYPOSITION | MF_STRING, xx (item_i+1), utf8_to_wide(item));
+    InsertMenuW(hpop, 0, MF_BYPOSITION | MF_STRING, xx (item_i+1), utf8_to_wide_new(item));
   }
   SetForegroundWindow(hwnd);
   mouse_global := Mouse.pos_global();
@@ -494,7 +501,7 @@ windows_bitmap_to_webp :: (bitmapinfobytes: string, quality : float = 90) -> web
   webpbytesstr: string;
   webpbytesstr.data = webpbytesptr;
   webpbytesstr.count = webpbytecount;
-  return copy_string(webpbytesstr, allocator=temp), bitmap.width, bitmap.height;
+  return copy_string(webpbytesstr,, temp), bitmap.width, bitmap.height;
 }
 
 webp_to_pixels :: (webpbytes: string) -> pixels: string, width: s32, height: s32 {
@@ -505,7 +512,7 @@ webp_to_pixels :: (webpbytes: string) -> pixels: string, width: s32, height: s32
   pixels: string;
   pixels.data = pixeldata;
   pixels.count = width*height*4;
-  return copy_string(pixels, allocator=temp), width, height;
+  return copy_string(pixels,, temp), width, height;
 }
 
 webp_to_simp_bitmap :: (webpbytes: string) -> Simp.Bitmap {
@@ -537,13 +544,14 @@ pixels_to_windows_bitmap :: (pixels: string, width: s32, height: s32) -> string 
   bitmap_header_str := to_stringbytes(*bitmap_header);
 
   #import "String";
-  return join(bitmap_header_str, pixels, allocator=temp);
+  return join(bitmap_header_str, pixels,, temp);
 }
 
 record_to_windows_bitmap :: (record: DbRecord) -> string {
   if record.type == .BITMAP return decompress(record.preview);
 
   cached_bitmap := read_entire_file_from_clipman_cache_temp_folder(interp("${record.id}"));
+  defer free(cached_bitmap);
   if cached_bitmap.count return decompress(cached_bitmap);
   if record.type == .WEBP return webp_to_windows_bitmap(record.preview);
 

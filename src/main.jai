@@ -82,7 +82,7 @@ main :: () {
 
     update();
 
-    if visible then render(); else sleep_milliseconds(1000/10);
+    if visible render(); else sleep_based_on_last_interaction_time();
 
     tfree();
 
@@ -100,7 +100,7 @@ selected_index        : int;
 selected_index_end    : int = -1;
 scroll_offset         : int;
 
-records               : [..] DbRecord;
+records               : [] DbRecord;
 total_copy_count      : int;
 total_wheel_delta     : int;
 
@@ -116,7 +116,7 @@ init_everything :: () {
 
   init_db();
 
-  array_reserve(*records, max_records);
+  records = NewArray(max_records, DbRecord);
 
   init_search_string();
 
@@ -262,7 +262,7 @@ update :: () {
       case .KEYUP;
         if event.key_code == {
 
-          case .F1;                 #if 0 report_memory_leaks();
+          case .F1;                 #if 1 report_memory_leaks();
           case .MOUSE_BUTTON_LEFT;  do_click();
           case .MOUSE_BUTTON_RIGHT; do_rightclick();
           case .DELETE;             do_delete();
@@ -662,20 +662,34 @@ update_records :: () {
   }
 
   the_select_from :: "select id, preview, last_seen_at, first_seen_at, count, type, bytecount from copy";
-  rows: #run type_of(db.select(""));
+  rows: type_of(db.select(""));
+
   if starts_with(search_string.*, "id:") {
     id_str := substr(search_string.*, "id:".count, -"id:".count);
     id := parse_int(*id_str);
     if id {
-      rows = db.select(to_c_string(interp("${the_select_from} where id=? limit 1"), temp), id);
+      rows = db.select(to_c_string(interp("${the_select_from} where id=? limit 1"),, temp), id);
     }
+
   } else if search_string.count {
-    // todo split search into multiples on space
-    // map(split(search_string), "preview like '%'||?||'%'"
-    // join(, " AND ")
-    rows = db.select(to_c_string(interp("${the_select_from} where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), cast(int)COPY_TYPE.TEXT, search_string.*, max_records, scroll_offset);
+    words := split(search_string.*, " ");
+    if(words.count > 1) {
+      where_arr: [..]string;
+      where_arr.allocator = temp;
+
+      for word: words {
+        array_add(*where_arr, interp("preview like '%${word}%'"));
+      }
+
+      where_string := join(..where_arr, " AND ",, temp);
+
+      rows = db.select(to_c_string(interp("${the_select_from} where type=? and ${where_string} ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"),, temp), cast(int)COPY_TYPE.TEXT, max_records, scroll_offset);
+    } else {
+      rows = db.select(to_c_string(interp("${the_select_from} where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"),, temp), cast(int)COPY_TYPE.TEXT, search_string.*, max_records, scroll_offset);
+    }
+
   } else {
-    rows = db.select(to_c_string(interp("${the_select_from} ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"), temp), max_records, scroll_offset);
+    rows = db.select(to_c_string(interp("${the_select_from} ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"),, temp), max_records, scroll_offset);
   }
 
   for row: rows {
@@ -767,7 +781,7 @@ do_delete :: () {
   ignore_next_blur = true;
 
   message := ifx multiselecting() interp("Are you sure you want to delete these #{selected_count()} clips?") else "Are you sure you want to delete this clip?";
-  response := MessageBoxW(null, utf8_to_wide(message), utf8_to_wide("Delete Record"), MB_OKCANCEL | MB_TOPMOST);
+  response := MessageBoxW(null, utf8_to_wide_new(message), utf8_to_wide_new("Delete Record"), MB_OKCANCEL | MB_TOPMOST);
   if response != IDOK then return;
 
   for selected_expansion {
@@ -856,7 +870,7 @@ on_copy :: () {
       files[i] = tprint("% - %", Strings.substring(f, mylastindex(f, #char "\\")+"\\".count), f);
     }
     // str := strings_alloc.join(files, "\n", tallocator);
-    str := String.join(..files, separator="\n", allocator=tallocator);
+    str := String.join(..files, separator="\n",, tallocator);
     insert_into_db(str, .FILE);
     update_records();
     return;
@@ -886,6 +900,12 @@ ensure_selection_in_range :: () {
 
        if scroll_offset < 0                  then scroll_offset = 0;
   else if scroll_offset >= total_copy_count  then {scroll_offset = total_copy_count-1; selected_index = 0;}
+}
+
+sleep_based_on_last_interaction_time :: () {
+  ms_since_last_interation := get_ms_since_last_interaction();
+  ms_to_sleep := mapnumber(xx ms_since_last_interation, 0,1000*60*5/*5 min*/, 1,200, exponent=1.5);
+  sleep_milliseconds(xx ms_to_sleep);
 }
 
 
@@ -1061,7 +1081,7 @@ MAX_LINE_COUNT :: 60;  // only for rendering performance
 // all the junk we depend on
 
 // RELEASE :: #run () -> bool {Compiler :: #import "Compiler"; return Compiler.get_build_options().optimization_level == .RELEASE; }();
-// _Basic :: #import "Basic"()(MEMORY_DEBUGGER=!RELEASE);
+#import "Basic"()(MEMORY_DEBUGGER=true);
 #import,file "modules/mybasic.jai";
 #import,file "modules/mywindows.jai";
 #import,file "modules/myclipboard.jai";

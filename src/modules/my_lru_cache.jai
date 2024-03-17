@@ -77,6 +77,17 @@ LRU :: struct(KEY_TYPE: Type, VALUE_TYPE: Type, ENTRY_COUNT: u8, FREE_PROC: (*VA
   Entry :: struct {key: KEY_TYPE; value: VALUE_TYPE;}
 }
 
+lru_free :: (lru: *LRU) {
+  assert(xx lru.FREE_PROC);
+
+  lru.next_index = lru.ENTRY_COUNT-1; // why not reset this
+  for i: 0 .. lru.ENTRY_COUNT-1 {
+    if lru.entries.key[i] == 0 continue;
+    // something exists here. free it
+    lru.entries.key[i] = 0;
+    lru.FREE_PROC(*lru.entries.value[i]);
+  }
+}
 
 add :: (lru: *LRU, key: lru.KEY_TYPE, value: lru.VALUE_TYPE) -> *lru.VALUE_TYPE {
   assert(key != 0); // currently a key of 0 isn't valid because that means it's an empty slot

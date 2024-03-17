@@ -4,7 +4,8 @@
 
 
 
-using #import "Basic";
+// using #import "Basic";
+#import "Basic";
 
 #import "String";
 mylog :: (args:..Any, to_standard_error := false) {
@@ -259,6 +260,10 @@ mapnumber :: (value: float, from1: float, from2: float, to1: float, to2:float, e
   return bdist*ratio + to1;
 }
 
+get_ms :: () -> float64 {
+  return to_float64_seconds(current_time_monotonic()) * 1000;
+}
+
 time :: ($code: Code, name: string, count:=1) #expand {
   starttime := get_time();
   for 1 .. count  #insert code;
@@ -298,7 +303,7 @@ fromcstr :: (cstr: *u8) -> string {
   return ret;
 }
 
-getms :: () -> float64 { return cast(float64)(get_time()*1000); }
+getms :: () -> float64 { return cast(float64)(seconds_since_init()*1000); }
 getutc :: () -> u32 {
   systemtime: SYSTEMTIME;
   GetSystemTime(*systemtime);
@@ -415,12 +420,12 @@ set_cwd_to_exe_location :: () {
   set_working_directory(String.path_strip_filename(system.get_path_of_running_executable()));
 }
 
-to_c_string :: (s: string, allocator: Allocator = .{}) -> *u8 {
-  result : *u8 = alloc(s.count + 1, allocator);
-  memcpy(result, s.data, s.count);
-  result[s.count] = 0;
-  return result;
-}
+// to_c_string :: (s: string) -> *u8 {
+//   result : *u8 = alloc(s.count + 1);
+//   memcpy(result, s.data, s.count);
+//   result[s.count] = 0;
+//   return result;
+// }
 
 embed_file :: (file_path: string) -> []u8 {
   File :: #import "File";
@@ -549,47 +554,51 @@ dedent :: (_str: string, glue := "\n") -> string {
 // Allocates response_body using context.allocator
 request :: (url: string, data := "", method := "", headers := string.[], include_headers := false, follow_redirects := true, timeout_seconds := 0) -> response_body: string, response_code: int, curl_code: CURLcode {
 
-    size_t :: u64;
-    write_callback :: (ptr: *u8, size: size_t, nmemb: size_t, userdata: *void) -> size_t #c_call {
-        builder := cast(*String_Builder)userdata;
-        jai_context: Context;
-        push_context jai_context {
-            append(builder, ptr, xx nmemb);
-        }
-        return nmemb;
+  size_t :: u64;
+  write_callback :: (ptr: *u8, size: size_t, nmemb: size_t, userdata: *void) -> size_t #c_call {
+    builder := cast(*String_Builder)userdata;
+    jai_context: Context;
+    push_context jai_context {
+        append(builder, ptr, xx nmemb);
     }
+    return nmemb;
+  }
 
-    curl := curl_easy_init();
-    assert(curl != null);
-    defer curl_easy_cleanup(curl);
+  curl := curl_easy_init();
+  assert(curl != null);
+  defer curl_easy_cleanup(curl);
 
-    curl_easy_setopt(curl, .URL, temp_c_string(url));
+  curl_easy_setopt(curl, .URL, temp_c_string(url));
 
-    if method                              curl_easy_setopt(curl, .CUSTOMREQUEST, temp_c_string(method));
-    if data || (method && method != "GET") curl_easy_setopt(curl, .POSTFIELDS, temp_c_string(data));
-    if include_headers                     curl_easy_setopt(curl, .HEADER, 1); // simply prepends headers to body
-    if method == "HEAD"                    curl_easy_setopt(curl, .NOBODY, 1);
-    if follow_redirects                    curl_easy_setopt(curl, .FOLLOWLOCATION, 1);
-    if timeout_seconds                     curl_easy_setopt(curl, .TIMEOUT, timeout_seconds);
+  if method                              curl_easy_setopt(curl, .CUSTOMREQUEST, temp_c_string(method));
+  if data || (method && method != "GET") curl_easy_setopt(curl, .POSTFIELDS, temp_c_string(data));
+  if include_headers                     curl_easy_setopt(curl, .HEADER, 1); // simply prepends headers to body
+  if method == "HEAD"                    curl_easy_setopt(curl, .NOBODY, 1);
+  if follow_redirects                    curl_easy_setopt(curl, .FOLLOWLOCATION, 1);
+  if timeout_seconds                     curl_easy_setopt(curl, .TIMEOUT, timeout_seconds);
 
-    if headers.count {
-        slist: *curl_slist;
-        for headers  slist = curl_slist_append(slist, temp_c_string(it));
-        curl_easy_setopt(curl, .HTTPHEADER, slist);
-    }
+  if headers.count {
+    slist: *curl_slist;
+    for headers  slist = curl_slist_append(slist, temp_c_string(it));
+    curl_easy_setopt(curl, .HTTPHEADER, slist);
+  }
 
-    builder: String_Builder;
-    defer free_buffers(*builder);
-    curl_easy_setopt(curl, .WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, .WRITEDATA,     *builder);
+  builder: String_Builder;
+  defer free_buffers(*builder);
+  curl_easy_setopt(curl, .WRITEFUNCTION, write_callback);
+  curl_easy_setopt(curl, .WRITEDATA,     *builder);
 
-    // actually execute the request. this is blocking
-    curl_code: CURLcode = curl_easy_perform(curl);
+  // i was getting the error PEER_FAILED_VERIFICATION
+  curl_easy_setopt(curl, .SSL_VERIFYPEER, 0);
+  curl_easy_setopt(curl, .SSL_VERIFYHOST, 0);
 
-    response_code: int;
-    if curl_code == .OK  curl_easy_getinfo(curl, .RESPONSE_CODE, *response_code);
+  // actually execute the request. this is blocking
+  curl_code: CURLcode = curl_easy_perform(curl);
 
-    response_body: string = builder_to_string(*builder);
+  response_code: int;
+  if curl_code == .OK  curl_easy_getinfo(curl, .RESPONSE_CODE, *response_code);
 
-    return response_body, response_code, curl_code;
+  response_body: string = builder_to_string(*builder);
+
+  return response_body, response_code, curl_code;
 }

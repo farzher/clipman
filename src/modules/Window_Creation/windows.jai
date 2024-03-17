@@ -31,8 +31,8 @@ create_window :: (width: int, height: int, window_name: string, window_x := -1, 
     // CW_USEDEFAULT :: 0x8000_0000;
 
     hwnd := CreateWindowExW(style_ex,
-                            utf8_to_wide(WINDOW_CLASS_NAME),
-                            utf8_to_wide(window_name),
+                            utf8_to_wide_new(WINDOW_CLASS_NAME),
+                            utf8_to_wide_new(window_name),
                             style,
                             xx window_x, xx window_y,
                             xx client_width,
@@ -176,7 +176,7 @@ init_window_class :: (background_color_rgb: [3] float) {
     wc.hbrBackground        = brush;  // cast(HBRUSH) GetStockObject(WHITE_BRUSH);
     
     wc.lpszMenuName         = null;
-    wc.lpszClassName        = utf8_to_wide(WINDOW_CLASS_NAME);
+    wc.lpszClassName        = utf8_to_wide_new(WINDOW_CLASS_NAME);
 
     // Register the window class
     if RegisterClassExW(*wc) == 0 {

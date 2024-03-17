@@ -1,4 +1,5 @@
 #import,dir "sqlite3";
+#import "Basic";
 #import,file "mybasic.jai";
 
 // if you need to open multiple db at the same time, use this module param
@@ -61,7 +62,7 @@ query :: (sql: *u8, binds: .. Any) -> bool {
 
 
 
-set_str :: (res: *sqlite3_stmt, i: int, str: string) { sqlite3_bind_text(res, xx i, to_c_string(str, tallocator), xx str.count, null); }
+set_str :: (res: *sqlite3_stmt, i: int, str: string) { sqlite3_bind_text(res, xx i, to_c_string(str,, tallocator), xx str.count, null); }
 set_int :: (res: *sqlite3_stmt, i: int, v: int)      { sqlite3_bind_int64(res, xx i, v); }
 get_int :: (res: *sqlite3_stmt, coli: int) -> int    { return sqlite3_column_int64(res, xx coli); }
 get_txt :: (res: *sqlite3_stmt, coli: int) -> string { return alloc_string(to_string(sqlite3_column_text(res, xx coli))); }
@@ -96,13 +97,13 @@ for_expansion :: (res: *sqlite3_stmt, body: Code, flags: For_Flags) #expand {
 
 
 
-alloc_string :: (tmp: string, allocator: Allocator = .{}) -> string {
-  str := alloc_string(tmp.count, allocator);
+alloc_string :: (tmp: string) -> string {
+  str := alloc_string(tmp.count);
   memcpy(str.data, tmp.data, tmp.count);
   return str;
 }
-to_c_string :: (s: string, allocator: Allocator = .{}) -> *u8 {
-  result : *u8 = alloc(s.count + 1, allocator);
+to_c_string :: (s: string) -> *u8 {
+  result : *u8 = alloc(s.count + 1);
   memcpy(result, s.data, s.count);
   result[s.count] = 0;
   return result;
