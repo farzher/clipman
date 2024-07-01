@@ -24,7 +24,7 @@ Nowhere near as advanced as Ditto, but this does support db encryption https://g
 Download the repo then run `release/clipman.exe`
 
 # Build From Source
-0. have #the_compiler(beta 0.1.088, built on 10 March 2024)
+0. have #the_compiler(beta 0.1.091, built on 8 June 2024)
 1. run `dev.bat` or `build_release.bat`
 
 # Understanding The Source Code
