@@ -65,6 +65,7 @@ KEYEVENTF_KEYUP       :: 0x0002;
 
 MF_BYPOSITION :: 0x00000400;
 MF_STRING :: 0x00000000;
+MF_CHECKED :: 0x00000008;
 
 TPM_RETURNCMD :: 0x0100;
 
@@ -211,6 +212,39 @@ _fileno :: (file: FILE) -> s32 #foreign Crt;
 fseek  :: (stream: FILE, offset: s64, whence: s32) -> s32 #foreign Crt;
 
 VkKeyScanA :: (ch: u8) -> u16 #foreign user32;
+
+
+
+
+// registry
+// Importing necessary Windows types
+// HKEY :: *void;
+PHKEY :: *HKEY;
+REGSAM :: u32;
+LONG :: s32;
+// DWORD :: u32;
+LPBYTE :: *u8;
+
+// Constants
+HKEY_CURRENT_USER : HKEY : xx 0x80000001;
+KEY_ALL_ACCESS : REGSAM : 0xF003F;
+KEY_READ : REGSAM : 0x20019;
+ERROR_SUCCESS : LONG : 0;
+// REG_SZ : DWORD : 1;
+
+// Function bindings
+RegOpenKeyExA      :: (hKey: HKEY, lpSubKey: *u8, ulOptions: DWORD, samDesired: REGSAM, phkResult: PHKEY) -> LONG #foreign Advapi32;
+RegSetValueExA     :: (hKey: HKEY, lpValueName: *u8, Reserved: DWORD, dwType: DWORD, lpData: LPBYTE, cbData: DWORD) -> LONG #foreign Advapi32;
+RegDeleteValueA    :: (hKey: HKEY, lpValueName: *u8) -> LONG #foreign Advapi32;
+RegQueryValueExA   :: (hKey: HKEY, lpValueName: *u8, lpReserved: *DWORD, lpType: *DWORD, lpData: LPBYTE, lpcbData: *DWORD) -> LONG #foreign Advapi32;
+RegCloseKey        :: (hKey: HKEY) -> LONG #foreign Advapi32;
+
+
+
+
+
+
+
 
 #scope_file
 ntdll       :: #system_library "Ntdll";

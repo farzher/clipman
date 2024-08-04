@@ -420,3 +420,92 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
       return false;
   }
 }
+
+
+
+
+
+
+
+
+
+
+add_to_startup :: ($app_name: string, app_path: string) -> bool {
+  hKey: HKEY;
+  result: LONG;
+
+  // Open the run key
+  run_key :: "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+  result = RegOpenKeyExA(HKEY_CURRENT_USER, run_key, 0, KEY_ALL_ACCESS, *hKey);
+  if result != ERROR_SUCCESS {
+    log_error("Error opening registry key\n");
+    return false;
+  }
+  defer RegCloseKey(hKey);
+
+  // Set the value
+  result = RegSetValueExA(hKey, app_name, 0, REG_SZ, cast(LPBYTE) to_c_string(app_path,, allocator=temp), cast(DWORD)(app_path.count + 1));
+  if result != ERROR_SUCCESS {
+    log_error("Error setting registry value\n");
+    return false;
+  }
+
+  log("Added to startup successfully\n");
+  return true;
+}
+
+
+remove_from_startup :: ($app_name: string) -> bool {
+  hKey: HKEY;
+  result: LONG;
+
+  // Open the run key
+  run_key :: "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+  result = RegOpenKeyExA(HKEY_CURRENT_USER, run_key, 0, KEY_ALL_ACCESS, *hKey);
+  if result != ERROR_SUCCESS {
+    log_error("Error opening registry key\n");
+    return false;
+  }
+  defer RegCloseKey(hKey);
+
+  // Delete the value
+  result = RegDeleteValueA(hKey, app_name);
+  if result != ERROR_SUCCESS {
+    log_error("Error deleting registry value\n");
+    return false;
+  }
+
+  log("Removed from startup successfully\n");
+  return true;
+}
+
+
+
+is_set_to_run_on_startup :: ($app_name: string) -> bool {
+  hKey: HKEY;
+  result: LONG;
+  buffer: [MAX_PATH]u8;
+  buffer_size: DWORD = MAX_PATH;
+  value_type: DWORD;
+
+  run_key :: "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+  result = RegOpenKeyExA(HKEY_CURRENT_USER, run_key, 0, KEY_READ, *hKey);
+  if result != ERROR_SUCCESS {
+    log_error("Error opening registry key\n");
+    return false;
+  }
+  defer RegCloseKey(hKey);
+
+  result = RegQueryValueExA(hKey, app_name, null, *value_type, cast(LPBYTE)buffer.data, *buffer_size);
+  if result == ERROR_SUCCESS && value_type == REG_SZ {
+    print("Application is set to run on startup\n");
+    print("Startup command: %\n", to_string(buffer.data, buffer_size - 1));  // -1 to exclude null terminator
+    return true;
+  } else if result == ERROR_FILE_NOT_FOUND {
+    print("Application is not set to run on startup\n");
+    return false;
+  } else {
+    print("Error querying registry value\n");
+    return false;
+  }
+}

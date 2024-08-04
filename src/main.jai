@@ -1,9 +1,9 @@
 #load "stuff.jai";
-using,only(Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, save_bitmap_to_file, myregisterhotkey)
+using,only(Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, save_bitmap_to_file, myregisterhotkey, add_to_startup, remove_from_startup, is_set_to_run_on_startup)
   Functions :: #import,file "functions.jai";
 
 APP_NAME      :: "ClipMan";
-VERSION       :: "v0.0.2";
+VERSION       :: "v0.0.3";
 CONFIG_PATH   :: "clipman.json";
 
 // default config
@@ -182,42 +182,11 @@ init_db :: (key: string = "") {
     )
   SQL);
 
-  // // auto delete big clips like images on startup, to keep the db small
-  // // but only if they haven't been used in a bit
-  // // this is slow and causes a slow startup
-  // if config.on_startup_delete_clips_bigger_than {
-  //   db.query(#string SQL
-  //     DELETE FROM copy WHERE length(cast(preview as blob)) > ?
-  //     AND DATETIME(last_seen_at, 'unixepoch') < DATETIME('now', '-7 day')
-  //   SQL, config.on_startup_delete_clips_bigger_than);
-  // }
-  // db.query("VACUUM"); // this is slow and causes a slow startup
-
-  db.query(#string SQL
-    CREATE INDEX IF NOT EXISTS index_last_seen_at ON copy (last_seen_at)
-  SQL);
-
-  db.query(#string SQL
-    CREATE INDEX IF NOT EXISTS index_first_seen_at ON copy (first_seen_at)
-  SQL);
-
-  db.query(#string SQL
-    CREATE INDEX IF NOT EXISTS index_type ON copy (type)
-  SQL);
-
-  db.query(#string SQL
-    CREATE INDEX IF NOT EXISTS index_preview_hash ON copy (preview_hash)
-  SQL);
-
-  db.query(#string SQL
-    CREATE INDEX IF NOT EXISTS index_bytecount ON copy (bytecount)
-  SQL);
-
-  // todo do i need an index on preview? wouldn't this make the table twice as big?
-  // db.query(#string SQL
-  //   CREATE UNIQUE INDEX IF NOT EXISTS index_preview ON copy (preview);
-  // SQL);
-
+  db.query("CREATE INDEX IF NOT EXISTS index_last_seen_at ON copy (last_seen_at)");
+  db.query("CREATE INDEX IF NOT EXISTS index_first_seen_at ON copy (first_seen_at)");
+  db.query("CREATE INDEX IF NOT EXISTS index_type ON copy (type)");
+  db.query("CREATE INDEX IF NOT EXISTS index_preview_hash ON copy (preview_hash)");
+  db.query("CREATE INDEX IF NOT EXISTS index_bytecount ON copy (bytecount)");
 
   total_copy_count = db.select_int("select count(1) from copy");
 
@@ -243,8 +212,11 @@ update :: () {
 
   update_records_handeled := false;
 
+  update_window_events();
+
   #if ONLY_RENDER_WHEN_CHANGED if events_this_frame.count render_dirty_info.new_event = true;
-  update_window_events(); for * event : events_this_frame {
+
+  for * event : events_this_frame {
     // if event.shift_pressed then mylog(event.*);
 
     // exit when you close the window or hit F5
@@ -259,20 +231,16 @@ update :: () {
       event.type = ifx event.key_pressed then event.type.KEYDOWN else .KEYUP;
 
     if event.type == {
-      case .KEYUP;
-        if event.key_code == {
-
-          case .F1;                 #if 1 report_memory_leaks();
-          case .MOUSE_BUTTON_LEFT;  do_click();
-          case .MOUSE_BUTTON_RIGHT; do_rightclick();
-          case .DELETE;             do_delete();
-          case .TAB;                do_tab();
-
-        }
 
       case .KEYDOWN;
 
         if event.key_code == {
+
+          case .F1;                 #if 0 report_memory_leaks();
+          case .MOUSE_BUTTON_LEFT;  do_click();
+          case .MOUSE_BUTTON_RIGHT; do_rightclick();
+          case .DELETE;             do_delete();
+          case .TAB;                do_tab();
 
           // in keydown so it doesn't trigger after delete confirmation
           case .ENTER;              if is_db_locked then decryptdb(); else do_submit_selected();
@@ -339,8 +307,18 @@ update :: () {
 
           case 517; // right click release
 
-            selection := popup_menu(.["Exit", "Encrypt", "Delete Large Text Clips", "VACUUM DB", "Config / Settings", "Import from Ditto", "Open"]);
+            run_on_startup := is_set_to_run_on_startup(APP_NAME);
+            startup_label := ifx run_on_startup then "[✓] Run on Startup" else "Run on Startup";
+
+            selection := popup_menu(.["Exit", startup_label, "Encrypt", "Delete Large Text Clips", "VACUUM DB", "Config / Settings", "Import from Ditto", "Open"]);
             if selection == {
+
+              case "Run on Startup";
+                System :: #import "System";
+                add_to_startup(APP_NAME, System.get_path_of_running_executable());
+
+              case "[✓] Run on Startup";
+                remove_from_startup(APP_NAME);
 
               case "Exit"; exit(0);
 
@@ -423,12 +401,13 @@ render :: () {
   }
 
   #if ONLY_RENDER_WHEN_CHANGED {
-    defer render_dirty_info.hover_index = hover_index;
-    if render_dirty_info.hover_index == hover_index && !render_dirty_info.new_event {
-      sleep_milliseconds(1);
-      return;
-    }
+
+    // if nothing changed, just sleep, don't render anything. the pervious frame will still be shown.
+    nothing_changed := render_dirty_info.hover_index == hover_index && !render_dirty_info.new_event;
+    if nothing_changed { sleep_milliseconds(1); return; }
+
     render_dirty_info.new_event = false; // set new_event as false when we render
+    render_dirty_info.hover_index = hover_index;
   }
 
   update_window_transparency(can_be_transparent=hover_index == -1);
@@ -728,18 +707,18 @@ do_rightclick :: () #expand {
 
   mouse := Mouse.pos(hwnd);
 
+  // before the right click menu pops up, select the item they clicked on! and render that change!
+    selected_index = mouse.y/config.record_height;
+    if selected_index < 0 then return;
+    if selected_index >= records.count then return;
+    render();
+
   selection := popup_menu(.["Delete", "Context", "Save To Downloads", "Sort By Size"]);
   if selection == {
 
     case "Delete"; do_delete();
 
     case "Context";
-      // if search_string.count == 0 then return;
-      // is_mouse_in_right_half := mouse.x >= window_width/4;
-      // if !is_mouse_in_right_half then return;
-      selected_index = mouse.y/config.record_height;
-      if selected_index < 0 then return;
-      if selected_index >= records.count then return;
       record := records[selected_index];
 
       order_by = "first_seen_at";
@@ -756,9 +735,6 @@ do_rightclick :: () #expand {
       update_records();
 
     case "Save To Downloads";
-      selected_index = mouse.y/config.record_height;
-      if selected_index < 0 then return;
-      if selected_index >= records.count then return;
       record := records[selected_index];
       if record.type == {
         case .BITMAP; #through;
@@ -1081,7 +1057,8 @@ MAX_LINE_COUNT :: 60;  // only for rendering performance
 // all the junk we depend on
 
 // RELEASE :: #run () -> bool {Compiler :: #import "Compiler"; return Compiler.get_build_options().optimization_level == .RELEASE; }();
-#import "Basic"()(MEMORY_DEBUGGER=true);
+// #import "Basic"()(MEMORY_DEBUGGER=true);
+#import "Basic";
 #import,file "modules/mybasic.jai";
 #import,file "modules/mywindows.jai";
 #import,file "modules/myclipboard.jai";

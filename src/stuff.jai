@@ -375,7 +375,13 @@ trayicon_create :: (tooltip: string) {
 popup_menu :: (items: []string) -> string {
   hpop := CreatePopupMenu();
   for item, item_i: items {
-    InsertMenuW(hpop, 0, MF_BYPOSITION | MF_STRING, xx (item_i+1), utf8_to_wide_new(item));
+    // if the item name starts with "[✓] " we will remove that from the name and add a real checkmark to the label
+    // ✓ is 3 bytes instead of 1, so the substr lengths are +2
+    is_checked := substr(item, 0, 4+2) == "[✓] ";
+    is_checked_flag : u32 = xx ifx is_checked then MF_CHECKED else 0;
+    label := ifx is_checked then substr(item, 4+2) else item;
+
+    InsertMenuW(hpop, 0, MF_BYPOSITION | MF_STRING | is_checked_flag, xx (item_i+1), utf8_to_wide_new(label,, allocator=temp));
   }
   SetForegroundWindow(hwnd);
   mouse_global := Mouse.pos_global();
