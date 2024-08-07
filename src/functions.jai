@@ -152,7 +152,7 @@ utc_to_time_ago :: (oldutc: int) -> string {
 }
 
 
-#import "lz4-1.9.1";
+#import "lz4";
 compress :: (str: string) -> string {
   compressed := talloc_string(str.count + 1024*10/*some extra space incase the compressed version is bigger? perf: i think i only need + 1 extra byte here*/);
   // nvm this actually started crashing with str.count + 1024, i needed to put 1024*10 to stop the crash when copying an image
@@ -444,7 +444,9 @@ add_to_startup :: ($app_name: string, app_path: string) -> bool {
   defer RegCloseKey(hKey);
 
   // Set the value
-  result = RegSetValueExA(hKey, app_name, 0, REG_SZ, cast(LPBYTE) to_c_string(app_path,, allocator=temp), cast(DWORD)(app_path.count + 1));
+  app_path_with_backslash := replace(app_path, "/", "\\");
+  app_path_with_backslash = tprint("\"%\"", app_path_with_backslash);
+  result = RegSetValueExA(hKey, app_name, 0, REG_SZ, cast(LPBYTE) to_c_string(app_path_with_backslash,, allocator=temp), cast(DWORD)(app_path_with_backslash.count));
   if result != ERROR_SUCCESS {
     log_error("Error setting registry value\n");
     return false;
@@ -499,7 +501,7 @@ is_set_to_run_on_startup :: ($app_name: string) -> bool {
   result = RegQueryValueExA(hKey, app_name, null, *value_type, cast(LPBYTE)buffer.data, *buffer_size);
   if result == ERROR_SUCCESS && value_type == REG_SZ {
     print("Application is set to run on startup\n");
-    print("Startup command: %\n", to_string(buffer.data, buffer_size - 1));  // -1 to exclude null terminator
+    print("Startup command: %\n", to_string(buffer.data, buffer_size));
     return true;
   } else if result == ERROR_FILE_NOT_FOUND {
     print("Application is not set to run on startup\n");
