@@ -857,7 +857,7 @@ make_good_suffix_delta :: (needle: string, character_compare: Character_Compare,
 
     last_prefix_index := needle.count - 1;
 
-    for #v2 < index: needle.count - 1 .. 0 {
+    for #v2 < index: 0 .. needle.count - 1 {
         if is_prefix(needle, index + 1, character_compare, reversed)
             last_prefix_index = index + 1;
         context.boyer_moore_thread_data.good_suffix_delta.data[index] = last_prefix_index + needle.count - 1 - index;
