@@ -149,7 +149,7 @@ get_vk :: (key: Key_Code) -> VK: u64 {
 
 MyWindowProc :: (hwnd: HWND, message: u32,
                  wParam: WPARAM, lParam: LPARAM) -> s64 #c_call {
-    new_context: Context;
+    new_context: #Context;
 
     WMAPP_NOTIFYCALLBACK :: WM_APP + 1; // xxx
     push_context new_context {
@@ -457,7 +457,7 @@ MyWindowProc :: (hwnd: HWND, message: u32,
                 ok := DragQueryFileW(drop, i, file_name_wide, file_name_wide_count);
                 assert(ok > 0); // means success
 
-                file_name := wide_to_utf8_new(file_name_wide);
+                file_name := wide_to_utf8(file_name_wide);
                 array_add(*files, file_name);
             }
 

@@ -200,7 +200,7 @@ is_twitch_url :: (str: string) -> bool {
 }
 twitch_username_from_url :: (str: string) -> string {
   username := ghetto_regex_capture(str, "twitch.tv/", is_alnum);
-  Strings.to_lower(username);
+  Strings.to_lower(*username);
   return username;
 }
 
@@ -381,7 +381,7 @@ popup_menu :: (items: []string) -> string {
     is_checked_flag : u32 = xx ifx is_checked then MF_CHECKED else 0;
     label := ifx is_checked then substr(item, 4+2) else item;
 
-    InsertMenuW(hpop, 0, MF_BYPOSITION | MF_STRING | is_checked_flag, xx (item_i+1), utf8_to_wide_new(label,, allocator=temp));
+    InsertMenuW(hpop, 0, MF_BYPOSITION | MF_STRING | is_checked_flag, xx (item_i+1), utf8_to_wide(label,, allocator=temp));
   }
   SetForegroundWindow(hwnd);
   mouse_global := Mouse.pos_global();

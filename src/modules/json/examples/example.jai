@@ -1,17 +1,41 @@
+#import, file "../module.jai";
+
+main :: () {
+	{
+		// Use the temporary allocator so we don't have to worry about individually freeing
+		// all the allocations.
+		push_allocator(temp);
+
+		typed_parsing();
+		typed_printing();
+		generic_parsing();
+		generic_printing();
+        rename_by_note();
+        custom_rename_procedure();
+        decode_into_struct_with_using();
+
+        enum_errors();
+	}
+
+    // Since the program ends here, this doesn't matter, but just setting an example.
+    reset_temporary_storage();
+}
 
 // Data structures for typed parsing/printing
 LevelData :: struct {
-    kind : LevelKind;
-    flags : LevelFlags;
-    secret: bool;
-    player: Entity;
-    player2: *Entity;
-    score: float;
+    kind:     LevelKind;
+    flags:    LevelFlags;
+    secret:   bool;
+    player:   Entity;
+    player2:  *Entity;
+    score:    float;
     entities: [..] Entity;
-    
+
+    floats:   [] float;
+
     LevelKind :: enum {
-        EASY :: 0;
-        HARD :: 1;
+        EASY      :: 0;
+        HARD      :: 1;
         LEGENDARY :: 2;
     }
 
@@ -29,17 +53,61 @@ Entity :: struct {
 }
 
 
-LEVEL_DATA_JSON := #string DONE
-{"kind" : ".HARD", "flags" : ".FLAG_A | .FLAG_C", "secret": false,"score":5.5,"player": {"name": "Pat","x": 10,"y": 10},"player2": {"name": "Chris"},"entities": [{"name": "fdsa","x": 0,"y": 0},{"name": "fdsa","x": 0,"y": 0}]}
+LEVEL_DATA_1_JSON := #string DONE
+{"kind": ".HARD", "flags": "FLAG_A | LevelFlags.FLAG_C", "secret": false,"score":5.5,"player": {"name": "Pat","x": 10,"y": 10},"player2": {"name": "Chris"},"entities": [{"name": "fdsa","x": 0,"y": 0},{"name": "fdsa","x": 0,"y": 0}], "floats": [0.00, 1.11111111111111111, 2.0202, 3e-5, 4.444444, -5.0]}
+DONE;
+
+LEVEL_DATA_2_JSON := #string DONE
+{"kind": 2}
+DONE;
+
+Fixed_Size_Data :: struct {
+    data: [3] int;
+}
+
+DATA_ARRAY_1 := #string DONE
+{"data": [1, 2, 3]}
+DONE;
+
+DATA_ARRAY_2 := #string DONE
+{"data": [1, 2]}
 DONE;
 
 typed_parsing :: () {
+    {
+        success, level := json_parse_string(LEVEL_DATA_1_JSON, LevelData, ignore_unknown=false);
+        // success, level := json_parse_file("level.json", LevelData, ignore_unknown=false);
+        assert(success);
 
-    success, level := json_parse_string(LEVEL_DATA_JSON, LevelData, ignore_unknown=false);
-    // success, level := json_parse_file("level.json", LevelData, ignore_unknown=false);
-    assert(success);
+        log("Typed parsing result 1:\n%\n\n", level);
+        assert(level.floats.count == 6);
+        assert(level.floats[1] > 1);  // Regression test, we had a bug here…
+    }
+    {
+        // Test parsing integers into enum slots
+        success, level := json_parse_string(LEVEL_DATA_2_JSON, LevelData, ignore_unknown=false);
+        assert(success);
 
-    print("Typed parsing result:\n%\n\n", level);
+        log("Typed parsing result 2:\n%\n\n", level);
+
+        assert(level.kind == .LEGENDARY);
+    }
+    {
+        // Test parsing into fixed-sized arrays
+        success, result := json_parse_string(DATA_ARRAY_1, Fixed_Size_Data, ignore_unknown=false);
+        assert(success);
+
+        log("Typed parsing result 3:\n%\n\n", result);
+
+        assert(result.data[0] == 1);
+        assert(result.data[1] == 2);
+        assert(result.data[2] == 3);
+    }
+    {
+        // Test parsing into fixed-sized arrays (incorrect size)
+        success, result := json_parse_string(DATA_ARRAY_2, Fixed_Size_Data, ignore_unknown=false);
+        assert(!success);
+    }
 }
 
 typed_printing :: () {
@@ -48,7 +116,7 @@ typed_printing :: () {
     array_add(*level.entities, .{name="Chris", x=6, y=6});
 
     json_string := json_write_string(level);
-    print("Typed printing result:\n%\n\n", json_string);
+    log("Typed printing result:\n%\n\n", json_string);
 
     // success := json_write_file("level.json", level, indent_char="");
     // assert(success);
@@ -82,7 +150,7 @@ DONE
     // success, root := json_parse_file("level.json");
     assert(success);
 
-    print("Generic parsing result:\n");
+    log("Generic parsing result:");
 
     // Print things out, for demonstration purposes
 
@@ -146,7 +214,7 @@ DONE
             version = val.number;
         }
     }
-    print("version: %\n", version);
+    log("version: %\n", version);
 
     // Traverse a structure we are confident about
     for get(root, "entities", .ARRAY).array {
@@ -157,16 +225,16 @@ DONE
         if entity_name == {
 			case "Player";
 				player_index := cast(int) get(it, "player_index", .NUMBER).number;
-				print("Player with player_index=%\n", player_index);
+				log("Player with player_index=%\n", player_index);
 			case "Snake";
 				snake_color := cast(int) get(it, "snake_color", .NUMBER).number;
-				print("Snake with snake_color=%\n", snake_color);
+				log("Snake with snake_color=%\n", snake_color);
 			case;
 				//...
         }
     }
 
-    print("\n");
+    log("\n");
 }
 
 generic_printing :: () {
@@ -197,31 +265,123 @@ generic_printing :: () {
 
     // Print result
     json_string := json_write_string(root);
-    print("Generic_printing result:\n%\n\n", json_string);
+    log("Generic_printing result:\n%\n\n", json_string);
 
     //json_write_file("level.json", root);
 }
 
-main :: () {
-    Debug.init();
+rename_by_note :: () {
+    // Sometimes the JSON we are parsing contains members with names we cannot use or don´t wanna.
 
-	{
-		// Use the temporary allocator so we don't have to worry about individually freeing
-		// all the allocations.
-		push_allocator(temp);
+    Message :: struct {
+        value: string;
+        _context: struct { // We cannot use "context" because it´s a reserved keyword in Jai.
+            channel: int;
+            parent: int;
+        } @JsonName(context) // This member in JSON is "context" but we need to have it as "_context". So we can use the JsonName note to encode and decode it as "context".
+    }
 
-		typed_parsing();
-		typed_printing();
-		generic_parsing();
-		generic_printing();
-	}
+    json := #string DONE
+    {
+        "value": "Hello!",
+        "context": {
+            "channel": 1,
+            "parent": 897820
+        }
+    }
+    DONE
 
-    // Since the program ends here, this doesn't matter, but just setting an example.
-    reset_temporary_storage();
+    success, message_decoded := json_parse_string(json, Message, ignore_unknown = false);
+    assert(success);
+
+    log("Rename_by_note decode result:\n%\n\n", message_decoded);
+    assert(message_decoded._context.channel == 1);
+
+
+    message_encoded := json_write_string(message_decoded);
+    log("Rename_by_note encode result:\n%\n\n", message_encoded);
+
+    assert(message_encoded.count != 0);
+    assert(find_index_from_left(message_encoded, "_context") == -1);
 }
 
-#load "../module.jai"; // In your code, you should do an #import instead of a #load (possibly using Compiler.Build_Options.modules_search_path_array)
+custom_rename_procedure :: () {
+    // We can also pass a custom rename procedure for renaming certain members.
+
+    rename_to_upper :: (member: *Type_Info_Struct_Member) -> string {
+        return to_upper_copy(member.name,,temp);
+    }
+
+    player := Entity.{
+        name="Player",
+        x = 10,
+        y = 50
+    };
+
+    player_encoded := json_write_string(player, rename=rename_to_upper);
+    assert(player_encoded.count != 0);
+
+    log("encoded with rename_to_upper:\n%\n\n", player_encoded);
+    assert(find_index_from_left(player_encoded, "name") == -1);
+    assert(find_index_from_left(player_encoded, "NAME") != -1);
+
+    success, player_decoded := json_parse_string(player_encoded, Entity, ignore_unknown = false, rename = rename_to_upper);
+    assert(success);
+    log("decoded with rename_to_upper:\n%\n\n", player_decoded);
+    assert(player_decoded.name == "Player");
+}
+
+decode_into_struct_with_using :: () {
+    Coordinates :: struct {
+        x: int;
+        y: int;
+    }
+
+    Tile :: struct {
+        color: string;
+        using coordinates: Coordinates;
+    }
+
+    JSON :: #string END
+    {
+        "color": "green",
+        "x": 1,
+        "y": 3
+    }
+    END
+
+    success, tile := json_parse_string(JSON, Tile, ignore_unknown = false);
+    assert(success);
+    log("Decoded tile: %", tile);
+    assert(tile.color == "green");
+    assert(tile.x == 1);
+    assert(tile.y == 3);
+}
+
+enum_errors :: () {
+    // Testing error messages when parsing invalid enum values
+    {
+        LEVEL_DATA_BROKEN_JSON := #string DONE
+            {"kind": ".VERY_HARD"}
+        DONE;
+
+        success, level := json_parse_string(LEVEL_DATA_BROKEN_JSON, LevelData, ignore_unknown=false);
+        assert(!success);
+    }
+
+    {
+        LEVEL_DATA_BROKEN_JSON := #string DONE
+            {"flags": "FLAG_A | FLAG_D"}
+        DONE;
+
+        success, level := json_parse_string(LEVEL_DATA_BROKEN_JSON, LevelData, ignore_unknown=false);
+        assert(!success);
+    }
+}
+
 
 #import "Basic";
-Debug :: #import "Debug";
+#import "Hash_Table"; // To be able to iterate over node.object
+#import "String"; // For to_upper_copy
+#import "Compiler"; // For Type_Info_Struct_Member
 Hash_Table :: #import "Hash_Table";

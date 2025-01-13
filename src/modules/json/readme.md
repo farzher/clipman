@@ -1,7 +1,10 @@
 # JSON serialization / deserialization module for Jai
 
+*Attention: This version requires Jai beta 0.1.080!*
+Use `v1.0.0` for older betas.
+
 This module offers two interfaces:
-* one uses a "generic tree" built from `JSON_Value` 
+* one uses a "generic tree" built from `JSON_Value`
 * the other is a typed version that serializes / deserializes your custom data structures.
 
 The generic `JSON_Value` graphs are a pain to consume and even worse to produce by hand.
@@ -24,7 +27,7 @@ There are also a convenience functions for parsing if the JSON data is in a file
 
 ```Jai
 success, result := json_parse_file(json_filename, Your_Type_To_Parse_Into);
-// … or 
+// … or
 success, result := json_parse_file(json_filename);
 ```
 
@@ -42,19 +45,19 @@ Your_Type_To_Parse_Into :: struct {
 	age: int;
 	something_we_dont_know_much_about: *JSON_Value; // Whatever structure hides in the JSON, it will be parsed into JSON_Value.
 }
-
+```
 ## Printing / Serialization
 
 Generating a string works the same for both interfaces:
 
 ```Jai
 json_str := json_write_string(my_value);
-
 ```
+
 where `my_value` is either a `JSON_Value` or any other data structure.
 
 See [`module.jai`](./module.jai) for details and additional parameters.
 
 ## Dependencies
 
-This module uses [the `unicode_utils` module](https://github.com/rluba/jai-unicode).
+This module uses [the `unicode_utils` module](https://github.com/rluba/jai-unicode), which is included as a submodule.

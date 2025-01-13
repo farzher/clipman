@@ -46,7 +46,7 @@ json_free :: (using val: JSON_Value) {
 				free(it_index);
 				json_free(it);
 			}
-			uninit(object);
+			deinit(object);
 
 			free(object);
 	}
@@ -382,4 +382,3 @@ parse_object :: (str: string) -> result: JSON_Object, remainder: string, success
 
 
 #import "Compiler";
-#import "unicode_utils";

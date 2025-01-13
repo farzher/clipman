@@ -186,7 +186,7 @@ decompress :: (compressed: string) -> string {
 
 // register hotkey using a string like alt+shift+1 instead of vk key codes
 myregisterhotkey :: (hwnd: HWND, id: s32, hotkeystring: string) -> bool {
-  Strings.to_lower(hotkeystring);
+  Strings.to_lower(*hotkeystring);
 
   parts := split(hotkeystring, "+");
   mod_parts := parts; mod_parts.count -= 1; // ["alt", "shift"]
@@ -212,7 +212,7 @@ myregisterhotkey :: (hwnd: HWND, id: s32, hotkeystring: string) -> bool {
 // wish there was a better way to do this ...
 string_to_vk :: (str: string) -> VK: u32 {
 
-  Strings.to_lower(str);
+  Strings.to_lower(*str);
 
   if str == {
     case "tab"            ; return VK_TAB;

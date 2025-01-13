@@ -557,7 +557,7 @@ request :: (url: string, data := "", method := "", headers := string.[], include
   size_t :: u64;
   write_callback :: (ptr: *u8, size: size_t, nmemb: size_t, userdata: *void) -> size_t #c_call {
     builder := cast(*String_Builder)userdata;
-    jai_context: Context;
+    jai_context: #Context;
     push_context jai_context {
         append(builder, ptr, xx nmemb);
     }

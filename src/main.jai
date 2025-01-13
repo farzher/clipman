@@ -497,7 +497,7 @@ render :: () {
         if search_string.count {
           text_x := 12;
           text_y := -12/2 + window_height - i*config.record_height - my_font.character_height*(line_count+1);
-          for Strings.split(line, search_string.*, keep_separator=.AS_PREFIX, compare=Strings.ignore_case) {
+          for Strings.split(line, search_string.*, keep_separator=.AS_PREFIX, character_compare=Strings.ignore_case) {
             text := it;
             if it_index > 0 {
               matchingtext := it;
@@ -757,7 +757,7 @@ do_delete :: () {
   ignore_next_blur = true;
 
   message := ifx multiselecting() interp("Are you sure you want to delete these #{selected_count()} clips?") else "Are you sure you want to delete this clip?";
-  response := MessageBoxW(null, utf8_to_wide_new(message), utf8_to_wide_new("Delete Record"), MB_OKCANCEL | MB_TOPMOST);
+  response := MessageBoxW(null, utf8_to_wide(message), utf8_to_wide("Delete Record"), MB_OKCANCEL | MB_TOPMOST);
   if response != IDOK then return;
 
   for selected_expansion {
