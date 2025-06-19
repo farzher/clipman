@@ -5,3 +5,4 @@
 *.codex
 ignore/
 bin/clipman.exe
+release/crash.log

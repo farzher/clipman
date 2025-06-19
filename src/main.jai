@@ -112,7 +112,7 @@ order_by := "last_seen_at";
 
 init_everything :: () {
 
-  // init_crash_log();
+  init_crash_log();
 
   init_db();
 
@@ -126,30 +126,34 @@ init_everything :: () {
 
 }
 
-// // redirect stderr to a crash.log file
-// // so we can actually know why it crashed in release builds
-// // this is annoying because it creates a crash.log even if it never crashed
-// // also it keeps the crash.log file open forever
-// // also this sucks because the original stderr isn't printed to the console anymore
-// init_crash_log :: () {
-//   #if !RELEASE return;
+// redirect stderr to a crash.log file
+// so we can actually know why it crashed in release builds
+// this is annoying because it creates a crash.log even if it never crashed
+// also it keeps the crash.log file open forever
+// also this sucks because the original stderr isn't printed to the console anymore
+init_crash_log :: () {
+  #if !RELEASE return;
 
-//   // create / open the crash.log file so we can get a handle to it
-//   crash_log_handle: FILE;
-//   fopen_s(*crash_log_handle, "crash.log", "a");
-//   SEEK_END :: 2;
-//   fseek(crash_log_handle, 0, SEEK_END); // "a" for append isn't working... ? idk, i need fseek to not overwrite the file
+  // create / open the crash.log file so we can get a handle to it
+  crash_log_handle: FILE;
+  fopen_s(*crash_log_handle, "crash.log", "a");
+  SEEK_END :: 2;
+  fseek(crash_log_handle, 0, SEEK_END); // "a" for append isn't working... ? idk, i need fseek to not overwrite the file
 
-//   // rewrite stderr to our crash.log file
-//   stderr_fileno :: 2;
-//   dup2success := _dup2(_fileno(crash_log_handle), stderr_fileno);
-//   if dup2success != 0 {
-//     mylog("crash.log failed to initialize ...");
-//     return;
-//   }
+  // rewrite stderr to our crash.log file
+  stderr_fileno :: 2;
+  dup2success := _dup2(_fileno(crash_log_handle), stderr_fileno);
+  if dup2success != 0 {
+    mylog("crash.log failed to initialize ...");
+    return;
+  }
 
-//   mylog("*** Program Started Running at: UTC", getutc(), "***", to_standard_error=true);
-// }
+  mylog("*** Program Started Running at: UTC", getutc(), "***", to_standard_error=true);
+
+  Debug :: #import "Debug"(USE_GRAPHICS=true);
+  Debug.init();
+  Debug.enable_signal_handler(interactive=true);
+}
 
 
 init_db :: (key: string = "") {
@@ -236,7 +240,16 @@ update :: () {
 
         if event.key_code == {
 
-          case .F1;                 #if 0 report_memory_leaks();
+          // can use F1 keys to paste from that index
+          // useful when copy pasting multiple things
+          case .F1;                 do_submit_selected(0);
+          case .F2;                 do_submit_selected(1);
+          case .F3;                 do_submit_selected(2);
+          case .F4;                 do_submit_selected(3);
+          case .F5;                 do_submit_selected(4);
+          case .F6;                 do_submit_selected(5);
+
+
           case .MOUSE_BUTTON_LEFT;  do_click();
           case .MOUSE_BUTTON_RIGHT; do_rightclick();
           case .DELETE;             do_delete();
@@ -773,7 +786,11 @@ do_tab :: () {
   if is_streamer_mode {is_streamer_mode = false; return; }
 }
 
-do_submit_selected :: () {
+do_submit_selected :: (force_selection := -1) {
+  if force_selection != -1 {
+    selected_index = force_selection;
+  }
+
   if selected_index < 0 then return;
   if selected_index >= records.count then return;
 
