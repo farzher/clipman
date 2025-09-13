@@ -8,14 +8,27 @@
 #import "Basic";
 
 #import "String";
-mylog :: (args:..Any, to_standard_error := false) {
+mylog :: (args:..Any, to_standard_error := false, loc := #caller_location) {
   if args.count == 0 { print("\n", to_standard_error=to_standard_error); return; }
 
   formatstr: string;
   push_tallocator();
   for args  formatstr = join(formatstr, "% ");
   formatstr[formatstr.count-1] = #char "\n"; // replace the trailing space with a newline
-  print(formatstr, ..args, to_standard_error=to_standard_error);
+
+  #if 1 {
+    // include filename and line number in the print
+    filename := path_filename(loc.fully_pathed_filename);
+    args_with_extra: [..] Any;
+    array_add(*args_with_extra, filename);
+    array_add(*args_with_extra, loc.line_number);
+    for args  array_add(*args_with_extra, it);
+
+    print(join("[%:%] ", formatstr), ..args_with_extra, to_standard_error=to_standard_error);
+  } else {
+    print(formatstr, ..args, to_standard_error=to_standard_error);
+  }
+
 }
 
 _lastmylogms: float64;
@@ -362,9 +375,9 @@ string_interpolation  :: ($_str: string, allocator: Allocator = temp, caller_sco
 
       is_start_of_interpolated_code := (str[i] == #char"#" || str[i] == #char"%" || str[i] == #char"$") && (i+1 < str.count-1 && str[i+1] == #char"{");
 
-      // if this character is a % that's not part of code, transform it into %% so it's interpreted as a normal %
+      // if this character is a % that's not part of code, transform it into \% so it's interpreted as a normal %
       if !is_start_of_interpolated_code && str[i] == #char"%" {
-        append(*format_str, "%%");
+        append(*format_str, "\\%");
         continue;
       }
 
