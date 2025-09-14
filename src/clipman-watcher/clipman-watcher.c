@@ -36,6 +36,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 void WINAPI WinMainCRTStartup(void) {
+    // Single-instance check
+    HANDLE hMutex = CreateMutexA(NULL, FALSE, "MUTEX_clipman-watcher");
+    if (!hMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
+        ExitProcess(0); // Another instance is running
+    }
+
     MSG msg;
     WNDCLASSA wc = {0};
 
@@ -44,7 +50,7 @@ void WINAPI WinMainCRTStartup(void) {
     wc.lpszClassName = "ClipManMsgOnlyClass";
     RegisterClassA(&wc);
 
-    // Create a message-only window (HWND_MESSAGE)
+    // Create a message-only window
     HWND hwnd = CreateWindowA("ClipManMsgOnlyClass", NULL,
                               0,0,0,0,0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
 
