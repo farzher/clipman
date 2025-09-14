@@ -108,6 +108,9 @@ main :: () {
     tfree();
 
   }
+
+  // notify windows to remove our tray icon because it's too stupid to do this on its own
+  trayicon_free();
 }
 
 // todo: need a way to edit settings / hotkey / remember password

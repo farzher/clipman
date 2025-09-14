@@ -191,6 +191,7 @@ NIF_REALTIME::  0x40;
 NIF_SHOWTIP ::  0x80;
 
 NIM_ADD :: 0x00;
+NIM_DELETE :: 0x02;
 NIM_SETVERSION :: 0x04;
 
 DwmFlush :: () -> HRESULT #foreign Dwmapi;

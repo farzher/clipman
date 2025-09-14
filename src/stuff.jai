@@ -355,6 +355,7 @@ WMAPP_NOTIFYCALLBACK :: WM_APP + 1;
 trayicon_create :: (tooltip: string) {
   nid: NOTIFYICONDATA;
   nid.hWnd = hwnd;
+  nid.uID    = 1;
   nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
   nid.uCallbackMessage = WMAPP_NOTIFYCALLBACK;
   nid.hIcon = LoadIconW(GetModuleHandleW(null), MAKEINTRESOURCEW(2));
@@ -366,6 +367,13 @@ trayicon_create :: (tooltip: string) {
   NOTIFYICON_VERSION_4 :: 4;
   nid.uVersion = NOTIFYICON_VERSION_4;
   Shell_NotifyIconA(NIM_SETVERSION, *nid);
+}
+trayicon_free :: () {
+  nid: NOTIFYICONDATA;
+  // nid.cbSize = size_of(NOTIFYICONDATA);
+  nid.hWnd   = hwnd;
+  nid.uID    = 1;
+  Shell_NotifyIconA(NIM_DELETE, *nid);
 }
 
 
