@@ -3,7 +3,7 @@ using,only(Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse
   Functions :: #import,file "functions.jai";
 
 APP_NAME      :: "ClipMan";
-VERSION       :: "v0.0.3";
+VERSION       :: "v0.0.4";
 CONFIG_PATH   :: "clipman.json";
 
 // default config
