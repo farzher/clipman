@@ -53,6 +53,15 @@ main :: () {
 
   config_load(); // load the config first
 
+  // when clipman is run on startup, i want it to run the watcher first instead
+  // but i don't want to deal with setting cmd args on startup, or changing the exe to the watcher
+  // so if config is set to use watcher, and we were not spawned by watcher, instantly kill ourselves and spawn watcher
+  if config.enable_watcher && !cmd_arg_spawned_by_watcher {
+    p: Process.Process;
+    success := Process.create_process(*p, "clipman-watcher.exe", kill_process_if_parent_exits = false);
+    return;
+  }
+
   // create the main window
   hwnd = create_window(
     window_name          = #run interp("%{APP_NAME} %{VERSION}"),
