@@ -220,6 +220,39 @@ escape :: (str: string) -> string {
 
 
 
+// return the positional argument at index
+// skips over / ignores non-positional arguments ex: -sleepms
+cmd_arg :: (index: int, default: string = "") -> string {
+  args_i_care_about: [..]string;
+  args_i_care_about.allocator = temp;
+  for arg, i: get_command_line_arguments() {
+    // the first arg, the exe name, is always allowed, even if it starts with a -
+    if i > 0 {
+      begins_with_dash := find_index_from_left(arg, "-") == 0;
+      if begins_with_dash continue;
+    }
+    array_add(*args_i_care_about, arg);
+  }
+
+  if index >= args_i_care_about.count return default;
+  return args_i_care_about[index];
+}
+
+// return the value of a named argument ex: -sleepms=0
+cmd_arg :: (varname: string, default: int = 0) -> int {
+  #import "String";
+  for arg: get_command_line_arguments() {
+    if arg == tprint("-%", varname) return 1;
+    if begins_with(arg, tprint("-%=", varname)) {
+      valstr := substr(arg, 1+varname.count+1);
+      return parse_int(*valstr);
+    }
+  }
+  return default;
+}
+
+
+
 
 
 

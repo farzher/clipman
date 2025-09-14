@@ -16,6 +16,7 @@ config: struct {
   transparency      : int    = 90;
   streamer_mode     : int    = 0; // for privacy. won't render clips unless you take an extra action. 0 to disable
   on_startup_open   : int    = 1;
+  enable_watcher    : int    = 0; // after 5min close process and open the watcher process instead to save ram
   large_text_clips  : int    = 10000; // Delete Large Text Clips will only delete clips at least this large
   hotkey            : string = "alt+`";
   db_name           : string = "clipman.db";
@@ -31,6 +32,7 @@ max_records   : int; // defined by config_load
 
 visible := true;
 hwnd    : HWND;
+quit    := false;
 
 
 ONLY_RENDER_WHEN_CHANGED :: true;
@@ -41,8 +43,12 @@ ONLY_RENDER_WHEN_CHANGED :: true;
   }
 }
 
-
+cmd_arg_spawned_by_watcher := false;
+cmd_arg_copy := false;
 main :: () {
+  cmd_arg_spawned_by_watcher = xx cmd_arg("spawned_by_watcher");
+  cmd_arg_copy = xx cmd_arg("copy");
+
   set_cwd_to_exe_location(); // ensures we read and write files next to the exe, whereever it is
 
   config_load(); // load the config first
@@ -59,6 +65,7 @@ main :: () {
   set_window_pos_to_mouse(hwnd);
   show_window(false);
   if config.on_startup_open then show_window(true); // need to call show_window even if it was already visible, to trigger streamer_mode stuff
+  if cmd_arg_spawned_by_watcher && !cmd_arg_copy then show_window(true); // showing window twice shouldn't be a problem, right?
 
   // register our global show hide hotkey
   // todo it would probably be smarter to let them register the hotkey
@@ -77,12 +84,17 @@ main :: () {
   // create tray icon
   trayicon_create(tooltip=#run interp("%{APP_NAME} %{VERSION}"));
 
+  // this has to happen after init everything
+  if cmd_arg_copy then on_copy();
+
   // main game loop
-  while 1 {
+  while !quit {
 
     update();
 
     if visible render(); else sleep_based_on_last_interaction_time();
+
+    maybe_quit_to_watcher();
 
     tfree();
 
@@ -112,7 +124,7 @@ order_by := "last_seen_at";
 
 init_everything :: () {
 
-  init_crash_log();
+  // init_crash_log();
 
   init_db();
 
@@ -126,34 +138,48 @@ init_everything :: () {
 
 }
 
-// redirect stderr to a crash.log file
-// so we can actually know why it crashed in release builds
-// this is annoying because it creates a crash.log even if it never crashed
-// also it keeps the crash.log file open forever
-// also this sucks because the original stderr isn't printed to the console anymore
-init_crash_log :: () {
-  #if !RELEASE return;
+Process :: #import "Process";
+maybe_quit_to_watcher :: () {
+  if !cmd_arg_spawned_by_watcher && !config.enable_watcher return;
+  if visible return;
 
-  // create / open the crash.log file so we can get a handle to it
-  crash_log_handle: FILE;
-  fopen_s(*crash_log_handle, "crash.log", "a");
-  SEEK_END :: 2;
-  fseek(crash_log_handle, 0, SEEK_END); // "a" for append isn't working... ? idk, i need fseek to not overwrite the file
-
-  // rewrite stderr to our crash.log file
-  stderr_fileno :: 2;
-  dup2success := _dup2(_fileno(crash_log_handle), stderr_fileno);
-  if dup2success != 0 {
-    mylog("crash.log failed to initialize ...");
-    return;
+  ms_since_last_interation := get_ms_since_last_interaction();
+  if ms_since_last_interation > 1000*60*5/*5 min*/ {
+    UnregisterHotKey(hwnd, 0);
+    p: Process.Process;
+    success := Process.create_process(*p, "clipman-watcher.exe", kill_process_if_parent_exits = false);
+    quit = true;
   }
-
-  mylog("*** Program Started Running at: UTC", getutc(), "***", to_standard_error=true);
-
-  Debug :: #import "Debug"(USE_GRAPHICS=true);
-  Debug.init();
-  Debug.enable_signal_handler(interactive=true);
 }
+
+// // redirect stderr to a crash.log file
+// // so we can actually know why it crashed in release builds
+// // this is annoying because it creates a crash.log even if it never crashed
+// // also it keeps the crash.log file open forever
+// // also this sucks because the original stderr isn't printed to the console anymore
+// init_crash_log :: () {
+//   #if !RELEASE return;
+
+//   // create / open the crash.log file so we can get a handle to it
+//   crash_log_handle: FILE;
+//   fopen_s(*crash_log_handle, "crash.log", "a");
+//   SEEK_END :: 2;
+//   fseek(crash_log_handle, 0, SEEK_END); // "a" for append isn't working... ? idk, i need fseek to not overwrite the file
+
+//   // rewrite stderr to our crash.log file
+//   stderr_fileno :: 2;
+//   dup2success := _dup2(_fileno(crash_log_handle), stderr_fileno);
+//   if dup2success != 0 {
+//     mylog("crash.log failed to initialize ...");
+//     return;
+//   }
+
+//   mylog("*** Program Started Running at: UTC", getutc(), "***", to_standard_error=true);
+
+//   Debug :: #import "Debug"(USE_GRAPHICS=true);
+//   Debug.init();
+//   Debug.enable_signal_handler(interactive=true);
+// }
 
 
 init_db :: (key: string = "") {

@@ -1,0 +1,13 @@
+// install visual studio c++ build tools
+// open x64 Native Tools Command Prompt for VS 2019
+// you have to open this special command prompt otherwise the cl command doesn't work properly .....
+
+// compile the program
+cl clipman-watcher.c /Os /GS- /GL /Gy /link /ENTRY:WinMainCRTStartup /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /INCREMENTAL:NO user32.lib kernel32.lib
+
+// strip/shrink the exe a bit
+editbin /RELEASE clipman-watcher.exe
+
+
+// this is to compile with a tray icon which i'm not using right now
+// cl clipman-watcher-withtray.c /Os /GS- /GL /Gy /link /ENTRY:WinMainCRTStartup /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /INCREMENTAL:NO user32.lib shell32.lib kernel32.lib

@@ -106,6 +106,7 @@ HARDWAREINPUT :: struct {
 PostMessageW :: (hwnd: HWND, msg: u32, wparam:WPARAM, lparam: LPARAM) -> BOOL #foreign user32;
 
 
+UnregisterHotKey :: (hwnd: HWND, id: s32) -> BOOL #foreign user32;
 RegisterHotKey :: (hwnd: HWND, id: s32, fsModifiers: u32, vk: u32) -> BOOL #foreign user32;
 SendInput :: (cInputs: u32, pInputs: *INPUT, cbSize: s32) -> u32 #foreign user32;
 SetFocus :: (hwnd: HWND) -> HWND #foreign user32;
