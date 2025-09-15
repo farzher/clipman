@@ -489,7 +489,7 @@ code_to_string :: (code: Code) -> string #expand {
   code_node := Compiler.compiler_get_nodes(code);
   builder: String_Builder;
   PP.print_expression(*builder, code_node);
-  return builder_to_string(*builder, allocator=temp);
+  return builder_to_string(*builder,, allocator=temp);
 }
 
 

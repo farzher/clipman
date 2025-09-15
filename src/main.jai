@@ -1,13 +1,20 @@
+// load stuff
 #load "stuff.jai";
-using,only(Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, save_bitmap_to_file, myregisterhotkey, add_to_startup, remove_from_startup, is_set_to_run_on_startup)
-  Functions :: #import,file "functions.jai";
 
+// import functions
+using,only(
+  Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste,
+  save_bitmap_to_file, myregisterhotkey, add_to_startup, remove_from_startup, is_set_to_run_on_startup
+) Functions :: #import,file "functions.jai";
+
+//
 APP_NAME      :: "ClipMan";
 VERSION       :: "v0.0.4";
 CONFIG_PATH   :: "clipman.json";
 
 // default config
-// overwitten by config_load
+// used to create the default clipman.json file
+// once quickly overwitten by config_load, you can use this config variable to access user's settings
 config: struct {
   window_width      : int    = 1200;
   window_height     : int    = 840;
@@ -24,15 +31,10 @@ config: struct {
 }
 
 // these values are calculated based on the config data
-// (this actual window_height may not be exactly what config.window_height wanted)
+// (this actual window_height may not be exactly the same as config.window_height)
 window_width  : int; // defined by config_load
 window_height : int; // defined by config_load
 max_records   : int; // defined by config_load
-
-
-visible := true;
-hwnd    : HWND;
-quit    := false;
 
 
 ONLY_RENDER_WHEN_CHANGED :: true;
@@ -43,38 +45,46 @@ ONLY_RENDER_WHEN_CHANGED :: true;
   }
 }
 
+
+hwnd    : HWND;
+visible := false;
+quit    := false;
+
 cmd_arg_spawned_by_watcher := false;
-cmd_arg_copy := false;
+cmd_arg_copy               := false;
 main :: () {
-  cmd_arg_spawned_by_watcher = xx cmd_arg("spawned_by_watcher");
-  cmd_arg_copy = xx cmd_arg("copy");
+  // read cmd line arguments
+    cmd_arg_spawned_by_watcher = xx cmd_arg("spawned_by_watcher");
+    cmd_arg_copy = xx cmd_arg("copy");
 
   set_cwd_to_exe_location(); // ensures we read and write files next to the exe, whereever it is
 
   config_load(); // load the config first
 
-  // when clipman is run on startup, i want it to run the watcher first instead
-  // but i don't want to deal with setting cmd args on startup, or changing the exe to the watcher
-  // so if config is set to use watcher, and we were not spawned by watcher, instantly kill ourselves and spawn watcher
-  if config.enable_watcher && !cmd_arg_spawned_by_watcher {
-    p: Process.Process;
-    success := Process.create_process(*p, "clipman-watcher.exe", kill_process_if_parent_exits = false);
-    return;
-  }
+  // when clipman is run on startup, maybe i want it to run the watcher first instead
+  // but i don't want to deal with setting cmd args on startup, or changing the startup exe to the watcher
+  // so if config is set to use watcher, and we we're not spawned by watcher, instantly kill ourselves and spawn watcher
+    if config.enable_watcher && !cmd_arg_spawned_by_watcher {
+      p: Process.Process;
+      success := Process.create_process(*p, "clipman-watcher.exe", kill_process_if_parent_exits = false);
+      return;
+    }
 
   // create the main window
-  hwnd = create_window(
-    window_name          = #run interp("%{APP_NAME} %{VERSION}"),
-    width                = window_width,
-    height               = window_height,
-    background_color_rgb = COLORS.to_3f(COLORS.DARK),
-    style                = WS_POPUP,
-    style_ex             = WS_EX_LAYERED | WS_EX_TOOLWINDOW
-  );
-  set_window_pos_to_mouse(hwnd);
-  show_window(false);
-  if config.on_startup_open then show_window(true); // need to call show_window even if it was already visible, to trigger streamer_mode stuff
-  if cmd_arg_spawned_by_watcher && !cmd_arg_copy then show_window(true); // showing window twice shouldn't be a problem, right?
+    hwnd = create_window(
+      window_name          = #run interp("%{APP_NAME} %{VERSION}"),
+      width                = window_width,
+      height               = window_height,
+      background_color_rgb = COLORS.to_3f(COLORS.DARK),
+      style                = WS_POPUP,
+      style_ex             = WS_EX_LAYERED | WS_EX_TOOLWINDOW
+    );
+    set_window_pos_to_mouse(hwnd);
+
+  // maybe show the window
+    show_window(false); // ensure show_window is called at least once because it does some setup stuff
+    if config.on_startup_open then show_window(true);
+    if cmd_arg_spawned_by_watcher && !cmd_arg_copy then show_window(true); // showing window twice shouldn't be a problem, right?
 
   // register our global show hide hotkey
   // todo it would probably be smarter to let them register the hotkey
@@ -84,17 +94,16 @@ main :: () {
   // need this to receive clipboard copy events
   AddClipboardFormatListener(hwnd);
 
-  // init Simp rendering stuff
-  Simp.set_render_target(hwnd);
-
   // init everything
   init_everything();
 
-  // create tray icon
-  trayicon_create(tooltip=#run interp("%{APP_NAME} %{VERSION}"));
-
   // this has to happen after init everything
   if cmd_arg_copy then on_copy();
+
+  // create tray icon
+  trayicon_create(tooltip=#run interp("%{APP_NAME} %{VERSION}"));
+  // notify windows to remove our tray icon because it's too stupid to do this on its own
+  defer trayicon_free();
 
   // main game loop
   while !quit {
@@ -109,8 +118,6 @@ main :: () {
 
   }
 
-  // notify windows to remove our tray icon because it's too stupid to do this on its own
-  trayicon_free();
 }
 
 // todo: need a way to edit settings / hotkey / remember password
@@ -138,6 +145,8 @@ init_everything :: () {
 
   // init_crash_log();
 
+  Simp.set_render_target(hwnd);
+
   init_db();
 
   records = NewArray(max_records, DbRecord);
@@ -150,7 +159,6 @@ init_everything :: () {
 
 }
 
-Process :: #import "Process";
 maybe_quit_to_watcher :: () {
   if !cmd_arg_spawned_by_watcher && !config.enable_watcher return;
   if visible return;
@@ -1126,6 +1134,8 @@ COLORS :: #import,dir "modules/colors";
 Simp :: #import "Simp";
 
 using,only(ceil,abs) Math :: #import "Math";
+
+Process :: #import "Process";
 
 // #import,dir "modules/Input";
 #import "Input"; // we need to use this normal style of import so we import the same Input as getrect
