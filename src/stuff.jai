@@ -41,7 +41,7 @@ request_q: struct {
   get :: (url: string) -> Request {
     ensure_init();
 
-    req, found := table_find(*request_q.request_cache, url);
+    found, req := table_find(*request_q.request_cache, url);
     if found return req;
 
     if !found {
@@ -242,19 +242,6 @@ ghetto_regex_capture :: (str: string, begin: string, is_matching_fn: (u8)->bool)
 
 
 
-search_input: GetRect.Text_Input_State;
-search_string: *string;
-
-GetRect :: #import "GetRect";
-init_search_string :: () {
-  search_input.active = true;
-  search_input.text.data = search_input.input_buffer.data;
-  search_string = *search_input.text;
-}
-update_search_string :: () {
-  selected_index = 0;
-  scroll_offset = 0;
-}
 
 
 

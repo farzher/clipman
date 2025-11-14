@@ -398,7 +398,7 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
   // change format from .BGRA8 to .RGBA8
   // wtf??? this is so weird.
   for i: 0 .. bitmap.width*bitmap.height-1 {
-    Swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
+    swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
   }
 
 

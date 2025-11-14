@@ -9,7 +9,7 @@ using,only(
 
 //
 APP_NAME      :: "ClipMan";
-VERSION       :: "v0.0.4";
+VERSION       :: "v0.0.5";
 CONFIG_PATH   :: "clipman.json";
 
 // default config
@@ -126,6 +126,7 @@ main :: () {
 // todo: ability to resize the window
 
 
+search_input          : GetRect.Text_Input_State;
 
 selected_index        : int;
 selected_index_end    : int = -1;
@@ -151,7 +152,7 @@ init_everything :: () {
 
   records = NewArray(max_records, DbRecord);
 
-  init_search_string();
+  GetRect.activate(*search_input);
 
   update_records();
 
@@ -258,7 +259,7 @@ update :: () {
 
   previous_select_index := selected_index;
   previous_scroll_offset := scroll_offset;
-  previous_search_string := search_string.*;
+  previous_search_string := search_input.text;
 
   update_records_handeled := false;
 
@@ -267,15 +268,16 @@ update :: () {
   #if ONLY_RENDER_WHEN_CHANGED if events_this_frame.count render_dirty_info.new_event = true;
 
   for * event : events_this_frame {
-    // if event.shift_pressed then mylog(event.*);
+    // mylog(event.*);
 
     // exit when you close the window or hit F5
     if event.type == .QUIT || event.key_code == .F5 then exit(0);
 
     // handle search input
     GetRect.current_time = getms();
-    if event.key_code != .ARROW_UP && event.key_code != .ARROW_DOWN // don't handle up/down arrow with getrect. it does some history navigation nonsense...
+    if event.key_code != .ARROW_UP && event.key_code != .ARROW_DOWN { // don't handle up/down arrow with getrect. it does some history navigation nonsense...
       GetRect.handle_event(*search_input, event.*);
+    }
 
     if event.type == .KEYBOARD // use .KEYUP and .KEYDOWN events insead of .KEYBOARD
       event.type = ifx event.key_pressed then event.type.KEYDOWN else .KEYUP;
@@ -430,7 +432,10 @@ update :: () {
 
   if update_records_handeled then return;
 
-  if previous_search_string != search_string.* then update_search_string();
+  if previous_search_string != search_input.text {
+    selected_index = 0;
+    scroll_offset = 0;
+  }
 
   // ensure indexes are in range, and if scroll_offset changes, need to re-query
   if previous_select_index != selected_index || previous_scroll_offset != scroll_offset {
@@ -438,7 +443,7 @@ update :: () {
     ensure_selection_in_range();
   }
 
-  if previous_scroll_offset != scroll_offset || previous_search_string != search_string.*
+  if previous_scroll_offset != scroll_offset || previous_search_string != search_input.text
     update_records();
 }
 
@@ -553,16 +558,16 @@ render :: () {
 
         if line.count > MAX_LINE_LEN then line.count = MAX_LINE_LEN;
 
-        if search_string.count {
+        if search_input.text.count {
           text_x := 12;
           text_y := -12/2 + window_height - i*config.record_height - my_font.character_height*(line_count+1);
-          for Strings.split(line, search_string.*, keep_separator=.AS_PREFIX, character_compare=Strings.ignore_case) {
+          for Strings.split(line, search_input.text, keep_separator=.AS_PREFIX, character_compare=Strings.ignore_case) {
             text := it;
             if it_index > 0 {
               matchingtext := it;
-              matchingtext.count = search_string.count;
-              text.data += search_string.count;
-              text.count -= search_string.count;
+              matchingtext.count = search_input.text.count;
+              text.data += search_input.text.count;
+              text.count -= search_input.text.count;
 
               text_width := Simp.prepare_text(my_font, maybe_censor(matchingtext));
               Simp.draw_prepared_text(my_font, xx text_x, xx text_y, COLORS.RED);
@@ -612,7 +617,7 @@ render :: () {
     ms := getms();
     if ms - search_input.last_keypress_time >= 1000 then return;
 
-    text_width := Simp.prepare_text(my_big_font, maybe_censor(search_string.*));
+    text_width := Simp.prepare_text(my_big_font, maybe_censor(search_input.text));
     text_x := window_width/2 - text_width/2;
     text_y := window_height - 100;
     color := COLORS.RED;
@@ -625,7 +630,7 @@ render :: () {
     //     end := search_input.selection.start_character;
     //     GetRect.draw_procs.prepare_text = Simp.prepare_text;
 
-    //     sx0, sx1 := GetRect.get_selection_endpoints(my_big_font, search_string.*, 0, xx text_x, start, end);
+    //     sx0, sx1 := GetRect.get_selection_endpoints(my_big_font, search_input.text, 0, xx text_x, start, end);
 
     //     sy0 := cast(float) text_y;
     //     sy1 := cast(float) text_y+my_big_font.character_height;
@@ -694,23 +699,23 @@ update_records :: () {
 
   // reset order back to default if we scroll top the top or start searching
   if order_by == "bytecount" {
-    if search_string.count then order_by = "last_seen_at";
+    if search_input.text.count then order_by = "last_seen_at";
   } else {
-    if scroll_offset == 0 || search_string.count then order_by = "last_seen_at";
+    if scroll_offset == 0 || search_input.text.count then order_by = "last_seen_at";
   }
 
   the_select_from :: "select id, preview, last_seen_at, first_seen_at, count, type, bytecount from copy";
   rows: type_of(db.select(""));
 
-  if starts_with(search_string.*, "id:") {
-    id_str := substr(search_string.*, "id:".count, -"id:".count);
+  if starts_with(search_input.text, "id:") {
+    id_str := substr(search_input.text, "id:".count, -"id:".count);
     id := parse_int(*id_str);
     if id {
       rows = db.select(to_c_string(interp("${the_select_from} where id=? limit 1"),, temp), id);
     }
 
-  } else if search_string.count {
-    words := split(search_string.*, " ");
+  } else if search_input.text.count {
+    words := split(search_input.text, " ");
     if(words.count > 1) {
       where_arr: [..]string;
       where_arr.allocator = temp;
@@ -723,7 +728,7 @@ update_records :: () {
 
       rows = db.select(to_c_string(interp("${the_select_from} where type=? and ${where_string} ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"),, temp), cast(int)COPY_TYPE.TEXT, max_records, scroll_offset);
     } else {
-      rows = db.select(to_c_string(interp("${the_select_from} where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"),, temp), cast(int)COPY_TYPE.TEXT, search_string.*, max_records, scroll_offset);
+      rows = db.select(to_c_string(interp("${the_select_from} where type=? and preview like '%'||?||'%' ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"),, temp), cast(int)COPY_TYPE.TEXT, search_input.text, max_records, scroll_offset);
     }
 
   } else {
@@ -891,7 +896,7 @@ do_submit_selected :: (force_selection := -1) {
 }
 
 decryptdb :: () {
-  init_db(search_string.*);
+  init_db(search_input.text);
   GetRect.clear_text(*search_input);
 }
 
@@ -1136,6 +1141,8 @@ Simp :: #import "Simp";
 using,only(ceil,abs) Math :: #import "Math";
 
 Process :: #import "Process";
+
+GetRect :: #import "GetRect";
 
 // #import,dir "modules/Input";
 #import "Input"; // we need to use this normal style of import so we import the same Input as getrect
