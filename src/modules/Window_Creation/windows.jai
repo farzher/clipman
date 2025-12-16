@@ -1,4 +1,4 @@
-create_window :: (width: int, height: int, window_name: string, window_x := -1, window_y := -1, parent: HWND = null, background_color_rgb := DEFAULT_WINDOW_CREATION_COLOR, style := WINDOWED_STYLE, style_ex : s32 = 0) -> HWND {
+create_window :: (width: int, height: int, window_name: string, window_x := -1, window_y := -1, parent: HWND = null, background_color_rgb := DEFAULT_WINDOW_CREATION_COLOR, style := WINDOWED_STYLE, style_ex : u32 = 0) -> HWND {
     if !window_class_initted {
         init_window_class(background_color_rgb);
     }

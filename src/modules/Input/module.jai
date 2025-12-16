@@ -5,29 +5,38 @@
   They'll get un-stuck if you press them again. To be fixed.
  */
 
-#if OS == .WINDOWS {
-    #load "windows.jai";
-} else #if OS == .LINUX {
-    #load "x11.jai";
-} else #if OS == .MACOSX {
-    #load "osx.jai";
+#if OS == {
+    case .WINDOWS; #load "windows.jai";
+    case .LINUX;   #load "x11.jai";
+    case .MACOS;   #load "macos.jai";
+    case .PS5;     #load "ps5.jai";
+    case .OUNCE;   #load "nintendo.jai";
+    case .ANDROID; #load "android.jai";
+}
+
+#if OS != .WINDOWS {
+    // This is just so we can ask #exists(context.input_handler) on every OS,
+    // but it's only here for Windows. "Yay." Windows version is in windows.jai.
+    #add_context input_handler: struct {};
 }
 
 Event_Type :: enum u32 {  // If we set this to u8, our packing will stop matching C's.
-    UNINITIALIZED       :: 0;
-    KEYBOARD            :: 1;
-    TEXT_INPUT          :: 2;
-    WINDOW              :: 3;
-    MOUSE_WHEEL         :: 4;
-    QUIT                :: 5;
+    UNINITIALIZED :: 0;
+    KEYBOARD    :: 1;
+    TEXT_INPUT  :: 2;
+    WINDOW      :: 3;
+    MOUSE_WHEEL :: 4;
+    QUIT        :: 5;
     DRAG_AND_DROP_FILES :: 6;
-    CLIP_COPY           :: 7;
-    FOCUS_LOST          :: 8;
-    HOTKEY              :: 9;
-    KEYUP               :: 10;
-    KEYDOWN             :: 11;
-    MY_TRAY_CONTEXT_COMMAND :: 12;
-    MY_TRAY :: 13;
+    TOUCH       :: 7;
+
+    KEYDOWN    :: 8;
+    KEYUP      :: 9;
+    CLIP_COPY  :: 10;
+    FOCUS_LOST :: 11;
+    HOTKEY     :: 12;
+    MY_TRAY    :: 13;
+    MY_TRAY_CONTEXT_COMMAND :: 14;
 }
 
 Key_Current_State :: enum_flags u32 {
@@ -55,7 +64,7 @@ Key_Code :: enum u32 {
 
     // The letters A-Z live in here as well and may be returned
     // by keyboard events.
-    
+
     DELETE      :: 127;
 
     ARROW_UP    :: 128;
@@ -73,12 +82,14 @@ Key_Code :: enum u32 {
 
     PAUSE       :: 137;
     SCROLL_LOCK :: 138;
-    
+
     ALT;
     CTRL;
     SHIFT;
-    
-    F1;         
+    CMD;
+    META :: CMD;
+
+    F1;
     F2;
     F3;
     F4;
@@ -122,6 +133,8 @@ Key_Code :: enum u32 {
     GAMEPAD_3_BEGIN;
     GAMEPAD_3_END :: GAMEPAD_3_BEGIN + xx GAMEPAD_BUTTON_COUNT;
 
+    TOUCH;
+
     // WARNING!
     //
     // We make an array whose size is controlled
@@ -145,32 +158,41 @@ Event :: struct {
 
         struct {
             // @@ This is confusing. Below key_pressed means the key was just pressed, here _pressed means the key is held down.
-            shift_pressed := false;   // Only set for Event_Type.KEYBOARD.
-            ctrl_pressed  := false;   // Only set for Event_Type.KEYBOARD.
-            alt_pressed   := false;
-            dummy         := false;
+            shift_pressed    := false;
+            ctrl_pressed     := false;
+            alt_pressed      := false;
+            cmd_meta_pressed := false; // Cmd on macOS, Meta on Linux
         }
-        
+
         packed: u32 = 0;
     }
-    
-    type : Event_Type = Event_Type.UNINITIALIZED;
+
+    type: Event_Type = Event_Type.UNINITIALIZED;
 
     // If keyboard event:
-    key_pressed : u32 = 0;  // If not pressed, it's a key release.
-    key_code : Key_Code = Key_Code.UNKNOWN;
+    key_pressed: u32;  // If not pressed, it's a key release.
+    key_code := Key_Code.UNKNOWN;
+    mycode: u32;
 
-    using modifier_flags: Modifier_Flags;
+    using modifier_flags: Modifier_Flags; // Only set for Event_Type.KEYBOARD.
 
-    utf32 : u32 = 0;  // If TEXT_INPUT.
+    utf32: u32;  // If TEXT_INPUT.
     repeat := false;  // If KEYBOARD event.
-    
+    text_input_count: u16; // If KEYBOARD event that also generated TEXT_INPUT events, this will tell you how many TEXT_INPUT events after this KEYBOARD event were generated.
+
     typical_wheel_delta: s32;  // Used only for mouse events.
     wheel_delta: s32;          // Used only for mouse events.
 
-    files: [] string;  // Used only for drag and drop events. Heap-allocated, lives until events are reset for the next frame.
+    files: [..] string;  // Used only for drag and drop events. Both the array and its contents are heap-allocated, lives until events are reset for the next frame.
 
-    mycode: int;
+
+    touch_type: enum u8 { // Used only for touch events.
+        MOVED    :: 0;
+        PRESSED  :: 1;
+        RELEASED :: 2;
+    }
+
+    touch_index:   s32;  // Used only for touch events. Index of which touch this is.
 }
 
 // Per-frame mouse deltas:
@@ -179,6 +201,7 @@ mouse_delta_y: int;
 mouse_delta_z: int;
 
 events_this_frame:   [..] Event;
+
 input_button_states: [NUM_BUTTON_STATES] Key_Current_State;
 
 input_application_has_focus := false;
@@ -201,12 +224,14 @@ get_window_resizes :: () -> [] Window_Resize_Record {
     // The return value here will stick around in memory until the next call
     // to get_window_resizes (from any thread. Actually this whole module does
     // not deal with threading, so don't do that!)
-    
+
     if resizes_to_free  array_reset(*resizes_to_free);
-    
+
     if !pending_resizes return .[];
 
     array_copy(*resizes_to_free, pending_resizes);
+    this_allocation_is_not_a_leak(resizes_to_free.data);
+
     pending_resizes.count = 0;
     return resizes_to_free;
 }
@@ -222,39 +247,29 @@ get_window_moves :: () -> [] Window_Move_Record {
     return moves_to_free;
 }
 
-is_a_window_resized :: () -> bool, Window_Resize_Record #deprecated "Use get_window_resizes instead." {
-    // Note: If the user never calls this routine, pending_resizes may grow without bound!
-    // Maybe we should clean this up so that it only stores one record per window, max.
-    
-    // @Robustness: Do we want to make it easier for the application by consolidating
-    // multiple resizes of the same window, so there's only one?
-    dummy: Window_Resize_Record = ---;
-    if !pending_resizes.count return false, dummy;
-    return true, pop(*pending_resizes);
-}
-
-has_a_window_moved :: () -> bool, Window_Move_Record #deprecated "Use get_window_moves instead." {
-    // Note: If the user never calls this routine, pending_moves may grow without bound!
-
-    // @Robustness: Do we want to make it easier for the application by consolidating
-    // multiple resizes of the same window, so there's only one?
-    dummy: Window_Move_Record = ---;
-    if !pending_moves.count return false, dummy;
-    return true, pop(*pending_moves);
-}
-
 input_per_frame_event_and_flag_update :: () {
     // Called once per frame, probably.
+
+    for events_this_frame {
+        allocator := it.files.allocator;  // Same allocator for filenames and the array itself.
+
+        for file: it.files {
+            free(file,, allocator);
+        }
+
+        array_free(it.files,, allocator);
+    }
+
     array_reset(*events_this_frame);
-    
+
     mask     := ~Key_Current_State.START;
     end_mask := ~(Key_Current_State.END | .DOWN | .START);
     // @Speed: Could just keep a list of who is not currently set.
     for * input_button_states {
-        if (<<it & .END) {
-            <<it &= end_mask;
+        if it.* & .END {
+            it.* &= end_mask;
         } else {
-            <<it &= mask;
+            it.* &= mask;
         }
     }
 

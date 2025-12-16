@@ -93,11 +93,8 @@ set_window_pos_to_mouse :: (hwnd: HWND) {
 
 send_paste :: () {
   // Create a generic keyboard event structure
-  ip: INPUT = ---;
+  ip: INPUT;
   ip.type = .INPUT_KEYBOARD;
-  ip.ki.wScan = 0;
-  ip.ki.time = 0;
-  ip.ki.dwExtraInfo = 0;
 
   // Press the "Ctrl" key
   ip.ki.wVk = VK_CONTROL;

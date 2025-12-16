@@ -8,7 +8,7 @@ Nowhere near as advanced as Ditto, but this does support db encryption https://g
 
 # Features
 - database encryption - (only when setting a password)
-- only 0.5MB RAM usage while idle - (with enable_watcher: 1 in clipman.json)
+- < 1MB RAM usage while idle - (with enable_watcher: 1 in clipman.json)
 - streamer mode - everytime clipman's opened all information is censored until you click or hit tab
 - images highgly compressed using webp to keep the .db file small
   - the original image is saved to the %temp% folder and will be used until it's gone
@@ -22,7 +22,7 @@ Nowhere near as advanced as Ditto, but this does support db encryption https://g
 Download the repo then run `release/clipman.exe`
 
 # Build From Source
-0. have #the_compiler(beta 0.2.018, built on 11 October 2025)
+0. have #the_compiler(beta 0.2.022, built on 15 December 2025)
 1. run `dev.bat` or `build_release.bat`
 
 # Understanding The Source Code
