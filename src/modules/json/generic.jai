@@ -180,7 +180,7 @@ json_write_json_value :: (builder: *String_Builder, using val: JSON_Value, inden
 			keys: [..] string;
 			defer array_free(keys);
 			array_reserve(*keys, obj.count);
-			for v, k: <<obj {
+			for v, k: obj.* {
 				array_add(*keys, k);
 			}
 			intro_sort(keys, compare);
@@ -297,7 +297,7 @@ parse_value :: (to_parse: string) -> JSON_Value, remainder: string, success: boo
 			result.array, remainder, success = parse_array(remainder);
 		case #char "{";
 			obj := cast(*JSON_Object) alloc(size_of(JSON_Object));
-			<<obj, remainder, success = parse_object(remainder);
+			obj.*, remainder, success = parse_object(remainder);
 			result = json_value(obj);
 		case;
 			result.type = JSON_Type.NUMBER;

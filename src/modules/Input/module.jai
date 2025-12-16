@@ -10,7 +10,7 @@
     case .LINUX;   #load "x11.jai";
     case .MACOS;   #load "macos.jai";
     case .PS5;     #load "ps5.jai";
-    case .OUNCE;   #load "nintendo.jai";
+    // case .OUNCE;   #load "nintendo.jai";
     case .ANDROID; #load "android.jai";
 }
 

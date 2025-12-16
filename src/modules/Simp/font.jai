@@ -626,7 +626,7 @@ get_font_at_size :: (memory: [] u8, pixel_height: int) -> *Dynamic_Font {
         array_add(*loaded_memory_fonts, loaded);
     }
     
-    load_font_part_2(result, << loaded, pixel_height);
+    load_font_part_2(result, loaded.*, pixel_height);
     return result;
 }
 
@@ -1083,8 +1083,8 @@ do_glyph_substitutions :: (using font : *Dynamic_Font, effect_flags: Font_Effect
     if effect_flags & .LINING_FIGURES {
         // Substitute lining figures...
         for * ptr : temporary_glyphs {
-            glyph := << ptr;
-            << ptr = single_substitute(font, feature_lining_numbers, glyph);
+            glyph := ptr.*;
+            ptr.* = single_substitute(font, feature_lining_numbers, glyph);
         }
     }    
 
@@ -1095,14 +1095,14 @@ do_glyph_substitutions :: (using font : *Dynamic_Font, effect_flags: Font_Effect
             // then just do lining figures if it's a digit... otherwise we end
             // up converting digits to smallcaps and that doesn't look right.
 
-            glyph := << ptr;
+            glyph := ptr.*;
             if effect_flags & .LINING_FIGURES {
                 utf32 := glyph.utf32;
                 if ((utf32 < 127) && isdigit(utf32)) continue;
             }
 
             sub := single_substitute(font, feature_smallcaps, glyph);
-            if sub { << ptr = sub; }
+            if sub { ptr.* = sub; }
         }
     }    
 }
@@ -1121,9 +1121,9 @@ read2_from_offset :: inline (base: *u8, offset: s64, reversed: bool) -> u16 {
     ptr := cast(*u16) (base + offset);
     
     if reversed {
-        return byte_swap(<< ptr);
+        return byte_swap(ptr.*);
     } else {
-        return << ptr;
+        return ptr.*;
     }
 }
 
@@ -1249,7 +1249,7 @@ expand_feature :: (using font: *Dynamic_Font, feature: *Font_Feature, lookup_lis
                     sub_dest.glyphs = NewArray(count, u16);
 
                     for * sub_dest.glyphs {
-                         << it = read2_from_offset(subtable, 6 + 2 * it_index, reversed);
+                         it.* = read2_from_offset(subtable, 6 + 2 * it_index, reversed);
                     }
                 } else {
                     assert(false);

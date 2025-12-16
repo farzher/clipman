@@ -326,7 +326,7 @@ bench :: (name: string, $code: Code, count:=1) #expand {
   bench(code, name, count=count);
 }
 
-substr :: inline (str: string, index: int, count: int = 0) -> string #must {
+substr :: inline (str: string, index: int, count: int = 0) -> string {
   if count == 0 count = str.count - index;
 
   c: string = ---;
@@ -360,7 +360,7 @@ getutc :: () -> u32 {
   SEC_TO_UNIX_EPOCH :: 11644473600;
 
   utc: *u64 = xx *filetime;
-  return cast(u32)( <<utc / WINDOWS_TICK - SEC_TO_UNIX_EPOCH);
+  return cast(u32)( utc.* / WINDOWS_TICK - SEC_TO_UNIX_EPOCH);
 }
 getutcms :: () -> u64 {
   systemtime: SYSTEMTIME;
@@ -372,7 +372,7 @@ getutcms :: () -> u64 {
   SEC_TO_UNIX_EPOCH :: 11644473600;
 
   utc: *u64 = xx *filetime;
-  return <<utc / WINDOWS_TICK - SEC_TO_UNIX_EPOCH;
+  return utc.* / WINDOWS_TICK - SEC_TO_UNIX_EPOCH;
 }
 
 

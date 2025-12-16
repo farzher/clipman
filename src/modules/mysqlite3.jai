@@ -32,8 +32,8 @@ select :: (sql: *u8, binds: .. Any) -> *sqlite3_stmt {
         isint := intinfo.runtime_size == 8 && intinfo.signed;
         assert(isint, "must be an int");
 
-        set_int(res, it_index+1, <<cast(*int)   it.value_pointer);
-      case .STRING;     set_str(res, it_index+1, <<cast(*string)it.value_pointer);
+        set_int(res, it_index+1, (.*)cast(*int)   it.value_pointer);
+      case .STRING;     set_str(res, it_index+1, (.*)cast(*string)it.value_pointer);
       case; assert(false, "unknown bind type");
     }
   }

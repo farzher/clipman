@@ -48,7 +48,7 @@ first_index :: (haystack: string, needle: u8, from_index: int, character_compare
                     }
 
                     for haystack_ptr .. min(haystack_ptr + 15, end - 1)
-                        if character_compare.compare(<<cast(*u8)it, needle)
+                        if character_compare.compare((.*)cast(*u8)it, needle)
                             return cast(int)(it - cast(u64)haystack.data), true;
 
                 case .AVX2;
@@ -88,7 +88,7 @@ first_index :: (haystack: string, needle: u8, from_index: int, character_compare
                     }
 
                     for haystack_ptr .. min(haystack_ptr + 31, end - 1)
-                        if character_compare.compare(<<cast(*u8)it, needle)
+                        if character_compare.compare((.*)cast(*u8)it, needle)
                             return cast(int)(it - cast(u64)haystack.data), true;
             }
 
@@ -175,7 +175,7 @@ first_index :: (haystack: string, needle: u8, from_index: int, character_compare
                     }
 
                     for haystack_ptr .. min(haystack_ptr + 15, end - 1)
-                        if character_compare.compare(<<cast(*u8)it, needle)
+                        if character_compare.compare((.*)cast(*u8)it, needle)
                             return cast(int)(it - cast(u64)haystack.data), true;
 
                 case .AVX2;
@@ -251,14 +251,14 @@ first_index :: (haystack: string, needle: u8, from_index: int, character_compare
                     }
 
                     for haystack_ptr .. min(haystack_ptr + 31, end - 1)
-                        if character_compare.compare(<<cast(*u8)it, needle)
+                        if character_compare.compare((.*)cast(*u8)it, needle)
                             return cast(int)(it - cast(u64)haystack.data), true;
             }
     }
 
     if !handled {
         for cast(u64)haystack.data + cast(u64)from_index .. cast(u64)haystack.data + cast(u64)haystack.count - 1
-            if character_compare.compare(<<cast(*u8)it, needle)
+            if character_compare.compare((.*)cast(*u8)it, needle)
                 return cast(int)(it - cast(u64)haystack.data), true;
     }
 
@@ -383,7 +383,7 @@ last_index :: (haystack: string, needle: u8, from_index: int, character_compare 
                         }
 
                         for #v2 < max(haystack_ptr, end) .. haystack_ptr + 15
-                            if character_compare.compare(<<cast(*u8)it, needle)
+                            if character_compare.compare((.*)cast(*u8)it, needle)
                                 return cast(int)(it - cast(u64)haystack.data), true;
                     }
 
@@ -429,7 +429,7 @@ last_index :: (haystack: string, needle: u8, from_index: int, character_compare 
                         }
 
                         for #v2 < max(haystack_ptr, end) .. haystack_ptr + 32
-                            if character_compare.compare(<<cast(*u8)it, needle)
+                            if character_compare.compare((.*)cast(*u8)it, needle)
                                 return cast(int)(it - cast(u64)haystack.data), true;
                     }
             }
@@ -515,7 +515,7 @@ last_index :: (haystack: string, needle: u8, from_index: int, character_compare 
                         }
 
                         for #v2 < max(haystack_ptr, end) .. haystack_ptr + 15
-                            if character_compare.compare(<<cast(*u8)it, needle)
+                            if character_compare.compare((.*)cast(*u8)it, needle)
                                 return cast(int)(it - cast(u64)haystack.data), true;
                     }
 
@@ -593,7 +593,7 @@ last_index :: (haystack: string, needle: u8, from_index: int, character_compare 
                         }
 
                         for #v2 < max(haystack_ptr, end) .. haystack_ptr + 31
-                            if character_compare.compare(<<cast(*u8)it, needle)
+                            if character_compare.compare((.*)cast(*u8)it, needle)
                                 return cast(int)(it - cast(u64)haystack.data), true;
                     }
             }
@@ -601,7 +601,7 @@ last_index :: (haystack: string, needle: u8, from_index: int, character_compare 
 
     if !handled {
         for #v2 < cast(u64)haystack.data .. cast(u64)haystack.data + cast(u64)from_index
-            if character_compare.compare(<<cast(*u8)it, needle)
+            if character_compare.compare((.*)cast(*u8)it, needle)
                 return cast(int)(it - cast(u64)haystack.data), true;
     }
 
@@ -642,7 +642,7 @@ last_index :: (haystack: string, needle: string, from_index: int, last_string_in
         return from_index, true;
     }
     else if needle.count == 1 {
-        index, found := last_index(haystack, << needle.data, from_index, character_compare);
+        index, found := last_index(haystack, (.*) needle.data, from_index, character_compare);
         return index, found;
     }
     else {
