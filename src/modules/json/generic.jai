@@ -97,7 +97,7 @@ print_val :: (using val: JSON_Value) {
 			for array	print_val(it);
 			print("]");
 		case .OBJECT;
-			print("%", <<object);
+			print("%", (.*)object);
 	}
 }
 
@@ -256,7 +256,7 @@ get_as :: (val: JSON_Value, $T: Type) -> T {
 		} else if T == JSON_Object {
 			return #string END
 				assert(val.type == .OBJECT, "Expected a % but got %", T, val.type);
-				return <<val.object;
+				return (.*)val.object;
 			END;
 		} else {
 			compiler_report("Unsupported type");

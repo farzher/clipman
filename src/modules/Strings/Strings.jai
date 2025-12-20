@@ -1058,7 +1058,7 @@ count :: (haystack: string, needle: u8, user_compare := default_character_compar
                     }
 
                     for data .. min(data + 15, end - 1)
-                        if <<cast(*u8)it == needle
+                        if (.*)cast(*u8)it == needle
                             total += 1;
 
                     return total;
@@ -1100,7 +1100,7 @@ count :: (haystack: string, needle: u8, user_compare := default_character_compar
                     }
 
                     for data .. min(data + 31, end - 1)
-                        if character_compare.compare(<<cast(*u8)it, needle)
+                        if character_compare.compare((.*)cast(*u8)it, needle)
                             total += 1;
 
                     return total;
@@ -1158,7 +1158,7 @@ count :: (haystack: string, needle: u8, user_compare := default_character_compar
                     }
 
                     for data .. min(data + 15, end - 1)
-                        if character_compare.compare(<<cast(*u8)it, needle)
+                        if character_compare.compare((.*)cast(*u8)it, needle)
                             total += 1;
 
                     return total;
@@ -1209,7 +1209,7 @@ count :: (haystack: string, needle: u8, user_compare := default_character_compar
                     }
 
                     for data .. min(data + 31, end - 1)
-                        if character_compare.compare(<<cast(*u8)it, needle)
+                        if character_compare.compare((.*)cast(*u8)it, needle)
                             total += 1;
 
                     return total;
@@ -1811,8 +1811,8 @@ to_upper :: (str_ptr: *string) {
     }
 
     for data .. end {
-        if <<cast(*u8)it >= #char "a" && <<cast(*u8)it <= #char "z" {
-            <<cast(*u8)it -= 32;
+        if (.*)cast(*u8)it >= #char "a" && (.*)cast(*u8)it <= #char "z" {
+            (.*)cast(*u8)it -= 32;
         }
     }
 }
@@ -2077,7 +2077,7 @@ hex_char_value :: inline (c: u8) -> u8 {
 maybe_ensure_null_terminate :: (builder: *String_Builder, $$null_terminate: bool) #expand {
     if null_terminate {
         buffer := get_current_buffer(builder);
-        if buffer.count == 0 || <<(get_buffer_data(buffer) + buffer.count - 1) != #char "\0"
+        if buffer.count == 0 || (.*)(get_buffer_data(buffer) + buffer.count - 1) != #char "\0"
             append(builder, #char "\0");
     }
 }
