@@ -889,9 +889,6 @@ do_submit_selected :: (force_selection := -1) {
       push_tallocator();
       filesstr: string;
       for line: Strings.line_split(record.preview) {
-        // todo: first_index is broken!!!
-        // filesstr = strings_alloc.join(filesstr, Strings.substring(line, first_index(line, " - ")+" - ".count), "\0");
-        // filesstr = strings_alloc.join(filesstr, Strings.substring(line, Strings.first_index(line, " - ")+" - ".count), "\0");
         filesstr = String.join(filesstr, Strings.substring(line, Strings.first_index(line, " - ")+" - ".count), "\0");
       }
       if record.preview.count then os_clipboard_set_file(hwnd, filesstr);
@@ -918,7 +915,6 @@ on_copy :: () {
     for f, i: files {
       files[i] = tprint("% - %", Strings.substring(f, mylastindex(f, #char "\\")+"\\".count), f);
     }
-    // str := strings_alloc.join(files, "\n", tallocator);
     str := String.join(..files, separator="\n",, tallocator);
     insert_into_db(str, .FILE);
     update_records();
@@ -1156,6 +1152,5 @@ GetRect :: #import "GetRect";
 #import "Windows_Utf8";
 
 String        :: #import "String";
-Strings       :: #import,dir "modules/jai-string/Strings";
-// strings_alloc :: #import,dir "modules/Strings_Alloc";
+Strings       :: #import,dir "modules/jai-string/Strings"(INDEX_ALGORITHM=.SUPER_SIMPLE);
 for_expansion :: Strings.for_expansion; // this is gross

@@ -13,7 +13,6 @@
 #import,file "modules/mywindows.jai";
 #import "Window_Creation";
 #import "String";
-Strings :: #import,dir "modules/jai-string/Strings";
 
 
 Mouse: struct {
@@ -206,10 +205,15 @@ decompress :: (compressed: string) -> string {
   return decompressed;
 }
 
+to_lower :: (p: *string) {
+  str := p.*;
+  for 0..str.count-1 str[it] = to_lower(str[it]);
+}
+
 
 // register hotkey using a string like alt+shift+1 instead of vk key codes
 myregisterhotkey :: (hwnd: HWND, id: s32, hotkeystring: string) -> bool {
-  Strings.to_lower(*hotkeystring);
+  to_lower(*hotkeystring);
 
   parts := split(hotkeystring, "+");
   mod_parts := parts; mod_parts.count -= 1; // ["alt", "shift"]
@@ -235,7 +239,7 @@ myregisterhotkey :: (hwnd: HWND, id: s32, hotkeystring: string) -> bool {
 // wish there was a better way to do this ...
 string_to_vk :: (str: string) -> VK: u32 {
 
-  Strings.to_lower(*str);
+  to_lower(*str);
 
   if str == {
     case "tab"            ; return VK_TAB;
