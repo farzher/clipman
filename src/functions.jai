@@ -13,7 +13,7 @@
 #import,file "modules/mywindows.jai";
 #import "Window_Creation";
 #import "String";
-Strings :: #import,dir "modules/Strings";
+Strings :: #import,dir "modules/jai-string/Strings";
 
 
 Mouse: struct {
@@ -113,6 +113,32 @@ send_paste :: () {
 
   // Release the "Ctrl" key
   ip.ki.wVk = VK_CONTROL;
+  ip.ki.dwFlags = KEYEVENTF_KEYUP;
+  SendInput(1, *ip, size_of(INPUT));
+}
+
+send_registered_hotkey :: () {
+  // Create a generic keyboard event structure
+  ip: INPUT;
+  ip.type = .INPUT_KEYBOARD;
+
+  // Press the "Alt" key
+  ip.ki.wVk = VK_MENU;
+  ip.ki.dwFlags = 0; // 0 for key press
+  SendInput(1, *ip, size_of(INPUT));
+
+  // Press the "~" key
+  ip.ki.wVk = VK_OEM_3;
+  ip.ki.dwFlags = 0; // 0 for key press
+  SendInput(1, *ip, size_of(INPUT));
+
+  // Release the "~" key
+  ip.ki.wVk = VK_OEM_3;
+  ip.ki.dwFlags = KEYEVENTF_KEYUP;
+  SendInput(1, *ip, size_of(INPUT));
+
+  // Release the "Alt" key
+  ip.ki.wVk = VK_MENU;
   ip.ki.dwFlags = KEYEVENTF_KEYUP;
   SendInput(1, *ip, size_of(INPUT));
 }

@@ -3,13 +3,13 @@
 
 // import functions
 using,only(
-  Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste,
+  Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, send_registered_hotkey,
   save_bitmap_to_file, myregisterhotkey, add_to_startup, remove_from_startup, is_set_to_run_on_startup
 ) Functions :: #import,file "functions.jai";
 
 //
 APP_NAME      :: "ClipMan";
-VERSION       :: "v0.0.6";
+VERSION       :: "v0.0.7";
 CONFIG_PATH   :: "clipman.json";
 
 // default config
@@ -81,15 +81,15 @@ main :: () {
     );
     set_window_pos_to_mouse(hwnd);
 
-  // maybe show the window
-    show_window(false); // ensure show_window is called at least once because it does some setup stuff
-    if config.on_startup_open then show_window(true);
-    if cmd_arg_spawned_by_watcher && !cmd_arg_copy then show_window(true); // showing window twice shouldn't be a problem, right?
-
   // register our global show hide hotkey
   // todo it would probably be smarter to let them register the hotkey
   // by pressing it instead of typing its string name into config file
   myregisterhotkey(hwnd, 0, config.hotkey);
+
+  // maybe show the window
+    show_window(false); // ensure show_window is called at least once because it does some setup stuff
+    if config.on_startup_open then show_window(true);
+    else if cmd_arg_spawned_by_watcher && !cmd_arg_copy then show_window(true);
 
   // need this to receive clipboard copy events
   AddClipboardFormatListener(hwnd);
@@ -166,6 +166,7 @@ maybe_quit_to_watcher :: () {
 
   ms_since_last_interation := get_ms_since_last_interaction();
   if ms_since_last_interation > 1000*60*5/*5 min*/ {
+  // if ms_since_last_interation > 1000*60*0.05/*small min*/ {
     UnregisterHotKey(hwnd, 0);
     p: Process.Process;
     success := Process.create_process(*p, "clipman-watcher.exe", kill_process_if_parent_exits = false);
@@ -477,6 +478,7 @@ render :: () {
   update_window_transparency(can_be_transparent=hover_index == -1);
 
   // render records
+  // draw_on_top: struct {x: float; y: float; w: float; h: float; t: *Simp.Texture; };
   i := records.count-1; while i >= 0 { defer i -= 1;
     record := records[i];
 
@@ -490,7 +492,7 @@ render :: () {
       }
 
       record_height := config.record_height;
-      if record.type != .BITMAP && hover_index == i {
+      if !is_image(record) && hover_index == i {
         line_count := Strings.count(record.preview, "\n") + 1;
         if line_count > config.record_lines {
           record_height += (line_count - config.record_lines) * (config.record_height/config.record_lines);
@@ -518,27 +520,24 @@ render :: () {
     render_lines_of_text_or_img :: () #expand {
 
       // if it's an img, or at least sometimes an img (ex imgur)
-      if record.type == .BITMAP || record.type == .WEBP || (hover_index == i && can_fetch_img_from_text(record.preview)) {
+      if is_image(record) || (hover_index == i && can_fetch_img_from_text(record.preview)) {
         if is_streamer_mode return;
-
-        texture := TextureCache.get_texture_for_record(record);
-        if !texture return;
-
-        ratio := min(cast(float)window_width/texture.width, cast(float)config.record_height/texture.height);
-        if hover_index == i then ratio = min(cast(float)window_width/texture.width, cast(float)(window_height - i*config.record_height)/texture.height);
 
         x := cast(float)0;
         y := cast(float)window_height - i*config.record_height;
-        width := texture.width * ratio;
-        height := texture.height * ratio;
-        Simp.set_shader_for_images(texture);
 
-        // why are these different?????????? one of them is upside down. i don't get it
-        if record.type == .BITMAP || record.type == .WEBP {
-          Simp.immediate_quad(x, y, x + width, y - height, COLORS.WHITE);
-        } else {
-          Simp.immediate_quad(x, y - height, x + width, y, COLORS.WHITE);
-        }
+        // if hovering then fullscreen
+        height := ifx hover_index == i then window_height - i*config.record_height else config.record_height;
+
+        render_record_image(record, x, y, xx window_width, xx height);
+
+        // if hover_index == i {
+        //   y = xx window_height;
+        //   ratio = min(cast(float)window_width/texture.width, cast(float, window_height)/texture.height);
+        //   width := texture.width * ratio;
+        //   height := texture.height * ratio;
+        //   draw_on_top = {x, y, x + width, y - height, texture};
+        // }
 
         return;
       }
@@ -547,7 +546,6 @@ render :: () {
       if record.type == .FILE {
         color = COLORS.MUTED;
       }
-
 
       for line, line_count: Strings.line_split(record.preview) {
         if hover_index != i {
@@ -591,6 +589,13 @@ render :: () {
     }
     render_lines_of_text_or_img();
   }
+
+  // // to draw fullscreen images on top of everything else
+  // if draw_on_top.t {
+  //   using draw_on_top;
+  //   Simp.set_shader_for_images(t);
+  //   Simp.immediate_quad(x, y, w, h, COLORS.WHITE);
+  // }
 
   render_errors :: () #expand {
     if is_config_parse_error {
@@ -1151,6 +1156,6 @@ GetRect :: #import "GetRect";
 #import "Windows_Utf8";
 
 String        :: #import "String";
-Strings       :: #import,dir "modules/Strings";
+Strings       :: #import,dir "modules/jai-string/Strings";
 // strings_alloc :: #import,dir "modules/Strings_Alloc";
 for_expansion :: Strings.for_expansion; // this is gross

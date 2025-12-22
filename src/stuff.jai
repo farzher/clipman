@@ -138,7 +138,7 @@ TextureCache: struct {
       return add(*TextureCache.texture_cache, record.id, texture);
     }
 
-    if record.type == .BITMAP || record.type == .WEBP {
+    if is_image(record) {
       bitmap := windows_bitmap_to_simp_bitmap(record_to_windows_bitmap(record));
       texture: Simp.Texture;
       Simp.texture_load_from_bitmap(*texture, *bitmap);
@@ -147,6 +147,22 @@ TextureCache: struct {
 
     assert(false); return null; // not all control paths return a value;
   }
+}
+
+is_image :: (record: DbRecord) -> bool { return record.type == .BITMAP || record.type == .WEBP; }
+render_record_image :: (record: DbRecord, x: float, y: float, max_w: float, max_h: float) -> bool {
+  texture := TextureCache.get_texture_for_record(record);
+  if(!texture) return false;
+
+  ratio := min(max_w/texture.width, max_h/texture.height);
+  w := texture.width * ratio;
+  h := texture.height * ratio;
+
+  Simp.set_shader_for_images(texture);
+  img_y := ifx is_image(record) then y else y - h;
+  img_h := ifx is_image(record) then y - h else y;
+  Simp.immediate_quad(x, img_y, x + w, img_h, COLORS.WHITE);
+  return true;
 }
 
 
@@ -179,13 +195,19 @@ is_imgur_url :: (str: string) -> bool {
 is_youtube_url :: (str: string) -> bool {
   // https://www.youtube.com/watch?v=VIDEOID
   // https://youtu.be/VIDEOID?t=7967
+  // https://www.youtube.com/shorts/OSTLiIh6FQg
+  // https://www.youtube.com/live/LtOiwjNsB0U
 
   if obviously_not_a_url(str) return false;
 
   starts_correctly := Strings.starts_with(str, "https://youtube.com/watch?v=")
                    || Strings.starts_with(str, "https://www.youtube.com/watch?v=")
                    || Strings.starts_with(str, "https://youtu.be/")
-                   || Strings.starts_with(str, "https://www.youtu.be/");
+                   || Strings.starts_with(str, "https://www.youtu.be/")
+                   || Strings.starts_with(str, "https://youtube.com/shorts/")
+                   || Strings.starts_with(str, "https://www.youtube.com/shorts/")
+                   || Strings.starts_with(str, "https://youtube.com/live/")
+                   || Strings.starts_with(str, "https://www.youtube.com/live/");
   if !starts_correctly return false;
 
   return true;
@@ -215,6 +237,8 @@ youtube_videoid_from_url :: (str: string) -> string {
   if !is_youtube_url(str) return "";
   return_this_if(ghetto_regex_capture(str, "youtube.com/watch?v=", is_alnum));
   return_this_if(ghetto_regex_capture(str, "youtu.be/", is_alnum));
+  return_this_if(ghetto_regex_capture(str, "youtube.com/shorts/", is_alnum));
+  return_this_if(ghetto_regex_capture(str, "youtube.com/live/", is_alnum));
   return "";
 }
 
