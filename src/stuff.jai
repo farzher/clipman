@@ -24,7 +24,7 @@ request_q: struct {
   // #import,dir "modules/Request";
   #import "Thread";
 
-  request_cache   : Table(string, Request);
+  request_cache   : Table(string, *Request);
   thread_group    : Thread_Group;
   inited          := false;
 
@@ -38,35 +38,34 @@ request_q: struct {
   }
 
 
-  get :: (url: string) -> Request {
+  get :: (url: string) -> *Request {
     ensure_init();
 
     found, req := table_find(*request_q.request_cache, url);
     if found return req;
 
-    if !found {
-      req: Request;
-      req.created_at_ms = getms();
-      req.status = .FETCHING;
-      req.url = copy_string(url); // url may be in temp storage
-      req_ptr := table_add(*request_q.request_cache, req.url, req);
-      add_work(*request_q.thread_group, req_ptr, req.url);
-    }
+    req = New(Request);
+    req.created_at_ms = getms();
+    req.status = .FETCHING;
+    req.url = copy_string(url); // url may be in temp storage
+    table_add(*request_q.request_cache, req.url, req);
+    add_work(*request_q.thread_group, req, req.url);
     return req;
   }
 
 
-  free :: (req: Request) {
+  free :: (req: *Request) {
     table_remove(*request_q.request_cache, req.url);
-    free(req.url.data);
-    if req.response free(req.response.data);
+    free(req.url);
+    if req.response free(req.response);
+    free(cast(*void)req); // cast so we call basic.free and not this free
   }
 
   free_all_old_finished_requests :: () {
     MAX_AGE_MS :: 5000;
 
     now := getms();
-    for *req: request_q.request_cache {
+    for req: request_q.request_cache {
       if !req.ready(req) continue;
       if (now - req.created_at_ms) < MAX_AGE_MS continue;
       req.free(req);
@@ -159,9 +158,7 @@ render_record_image :: (record: DbRecord, x: float, y: float, max_w: float, max_
   h := texture.height * ratio;
 
   Simp.set_shader_for_images(texture);
-  img_y := ifx is_image(record) then y else y - h;
-  img_h := ifx is_image(record) then y - h else y;
-  Simp.immediate_quad(x, img_y, x + w, img_h, COLORS.WHITE);
+  Simp.immediate_quad(x, y-h, x + w, y, COLORS.WHITE);
   return true;
 }
 
@@ -445,69 +442,53 @@ mylastindex :: (str: string, char: u8) -> int {
 // cf_dib is the raw contents of GetClipboardData(CF_DIB)
 // try to parse this thing into a simp bitmap
 windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
-  if(cf_dib == "") return .{};
+  if cf_dib.count < size_of(BITMAPINFOHEADER) return .{};
 
-  BI_BITFIELDS :: 3;
+  header := cast(*BITMAPINFOHEADER) cf_dib.data;
 
-  bitmap_header: *BITMAPINFOHEADER = xx cf_dib.data;
+  width  := header.biWidth;
+  height := header.biHeight;
+  is_bottom_up := true;
 
-  bytes_per_pixel := (() -> int #expand {
-    if bitmap_header.biBitCount == 24 return 3;
-    if bitmap_header.biBitCount == 32 return 4;
-    assert(false); // shouldn't get here
-  })();
+  if height < 0 {
+    height = -height;
+    is_bottom_up = false;
+  }
 
-  bitmap_pixeldata := (() -> string #expand {
-    pixel_offset := size_of(BITMAPINFOHEADER);
-    if bitmap_header.biCompression == BI_BITFIELDS then pixel_offset += 3*4;
+  pixels_offset := header.biSize;
+  if header.biCompression == BI_BITFIELDS pixels_offset += 12;
+  if cf_dib.count < pixels_offset return .{};
 
-    bitmap_pixeldata := cf_dib;
-    bitmap_pixeldata.data += pixel_offset;
-    bitmap_pixeldata.count -= pixel_offset;
-
-    // if bytes_per_pixel is 3, convert it to 4, so we don't have to worry about 4 byte padding and junk
-    ensure_4_bytes_per_pixel_BGRA_format :: () #expand {
-      if bytes_per_pixel == 4 return;
-      assert(bytes_per_pixel == 3);
-
-      correct_pixeldata := talloc_string(bitmap_header.biWidth * bitmap_header.biHeight * 4);
-
-      pixels_pushed := 0;
-      push_pixel :: (r: u8, g: u8, b: u8) #expand {
-        correct_pixeldata[pixels_pushed*4+0] = b;
-        correct_pixeldata[pixels_pushed*4+1] = g;
-        correct_pixeldata[pixels_pushed*4+2] = r;
-        correct_pixeldata[pixels_pushed*4+3] = 255;
-        pixels_pushed += 1;
-      }
-
-      w := bitmap_header.biWidth;
-      stride_padding := bitmap_header.biWidth % 4;
-
-      for y: 0..bitmap_header.biHeight-1 {
-        for x: 0..bitmap_header.biWidth-1 {
-          push_pixel(
-            bitmap_pixeldata[(x+y*w)*3 +stride_padding*y +2],
-            bitmap_pixeldata[(x+y*w)*3 +stride_padding*y +1],
-            bitmap_pixeldata[(x+y*w)*3 +stride_padding*y +0]
-          );
-        }
-      }
-
-      bitmap_pixeldata = xx correct_pixeldata;
-      bytes_per_pixel = 4;
-    }
-    ensure_4_bytes_per_pixel_BGRA_format();
-
-    return bitmap_pixeldata;
-  })();
+  src_bytes_per_pixel := header.biBitCount / 8;
+  src_stride := ((width * src_bytes_per_pixel) + 3) & ~3;
 
   bitmap: Simp.Bitmap;
-  bitmap.width  = bitmap_header.biWidth;
-  bitmap.height = bitmap_header.biHeight;
-  bitmap.format = .BGRA8;
-  bitmap.stride = bitmap.width * 4;
-  bitmap.data   = xx bitmap_pixeldata;
+  bitmap.width  = width;
+  bitmap.height = height;
+  bitmap.format = .RGBA8;
+  bitmap.stride = width * 4;
+  bitmap.data = NewArray(width * height * 4, u8, initialized=false,, temp);
+
+  dest_raw_ptr := bitmap.data.data;
+  src_pixels_start := cf_dib.data + pixels_offset;
+
+  for y: 0..height-1 {
+    src_y := ifx is_bottom_up then (height - 1) - y else y;
+
+    src_row  := src_pixels_start + (src_y * src_stride);
+    dest_row := dest_raw_ptr     + (y * bitmap.stride);
+
+    for x: 0..width-1 {
+      src_ptr  := src_row  + (x * src_bytes_per_pixel);
+      dest_ptr := dest_row + (x * 4);
+
+      dest_ptr[0] = src_ptr[2];
+      dest_ptr[1] = src_ptr[1];
+      dest_ptr[2] = src_ptr[0];
+      dest_ptr[3] = ifx src_bytes_per_pixel == 4 then src_ptr[3] else 255;
+    }
+  }
+
   return bitmap;
 }
 

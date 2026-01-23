@@ -176,11 +176,11 @@ utc_to_time_ago :: (oldutc: int) -> string {
 
 #import "lz4";
 compress :: (str: string) -> string {
-  compressed := talloc_string(str.count + 1024*10/*some extra space incase the compressed version is bigger? perf: i think i only need + 1 extra byte here*/);
-  // nvm this actually started crashing with str.count + 1024, i needed to put 1024*10 to stop the crash when copying an image
+  compressed := talloc_string(LZ4_compressBound(xx str.count));
 
-  bytes_written := LZ4_compress_default(str.data , compressed.data, xx str.count, xx compressed.count);
-  if bytes_written <= 0  die("compress error");
+  bytes_written := LZ4_compress_default(str.data, compressed.data, xx str.count, xx compressed.count);
+
+  if bytes_written <= 0 die("compress error");
   compressed.count = bytes_written;
   return compressed;
 }
@@ -189,14 +189,20 @@ compress :: (str: string) -> string {
 // so now this function deals with those cases
 decompress_high_watermark := 1024 * 1024;
 decompress :: (compressed: string) -> string {
-  if(compressed == "") return "";
+  if compressed == "" return "";
 
   decompressed := talloc_string(decompress_high_watermark);
   bytes_written := LZ4_decompress_safe(compressed.data, decompressed.data, xx compressed.count, xx decompressed.count);
 
-  if bytes_written <= 0 {
-    // error. we probably didn't allocate enough space. let's allocate more and try again
-    // it's possible the compressed string is corrupt? in that case we'd allocate more and more until we crash ...
+  if bytes_written < 0 {
+
+    // only try to resize if we haven't hit a sane limit
+    if decompress_high_watermark > 100 * 1024 * 1024 {
+      mylog("Decompression failed: Data corrupt or too large.", compressed.count);
+      decompress_high_watermark = 1024 * 1024; // reset watermark
+      return "";
+    }
+
     decompress_high_watermark *= 2;
     return decompress(compressed);
   }
@@ -424,8 +430,15 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
 
   // change format from .BGRA8 to .RGBA8
   // wtf??? this is so weird.
-  for i: 0 .. bitmap.width*bitmap.height-1 {
-    swap(*bitmap.data[i*components+0], *bitmap.data[i*components+2]);
+  row_ptr := bitmap.data.data;
+  for y: 0..bitmap.height-1 {
+    pixel_ptr := row_ptr;
+    for x: 0..bitmap.width-1 {
+      // swap red and blue
+      swap(*pixel_ptr[0], *pixel_ptr[2]);
+      pixel_ptr += components;
+    }
+    row_ptr += bitmap.stride; // jump by stride, skipping padding
   }
 
 
