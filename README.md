@@ -22,8 +22,11 @@ Nowhere near as advanced as Ditto, but this does support db encryption https://g
 Download the repo then run `release/clipman.exe`
 
 # Build From Source
-0. have #the_compiler(beta 0.2.022, built on 15 December 2025)
+0. have #the_compiler(beta 0.2.025, built on 19 January 2026)
 1. run `dev.bat` or `build_release.bat`
+
+# Known Issues
+1. when using enable_watcher, opening clipman sometimes doesn't have focus or accept text input
 
 # Understanding The Source Code
 - first.jai         - the build script
