@@ -25,9 +25,6 @@ Download the repo then run `release/clipman.exe`
 0. have #the_compiler(beta 0.2.025, built on 19 January 2026)
 1. run `dev.bat` or `build_release.bat`
 
-# Known Issues
-1. when using enable_watcher, opening clipman sometimes doesn't have focus or accept text input
-
 # Understanding The Source Code
 - first.jai         - the build script
 - src/main.jai      - the main game loop
