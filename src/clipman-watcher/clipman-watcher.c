@@ -1,3 +1,12 @@
+// this is an incredibly simple background program that runs instead of clipman
+// when clipman is idle for too long. this program uses almost no resources
+// and just listens for alt + ~ or a copy event, when this happens we kill
+//   ourselves and launch clipman.
+
+// this program used to be a lot more simple but is now complicated to work around
+//   windows not wanting to give clipman focus.
+
+// HOW TO BUILD:
 // install visual studio c++ build tools
 // open x64 Native Tools Command Prompt for VS 2019
 // you have to open this special command prompt otherwise the cl command doesn't work properly .....
@@ -23,11 +32,11 @@ static void SpawnClipManWithArgAndExit(const char* arg) {
   STARTUPINFOA si={0};
   PROCESS_INFORMATION pi={0};
 
-  // Release
+  // release global hotkey
   UnregisterHotKey(NULL,HOTKEY_ID);
   RemoveClipboardFormatListener(g_wnd);
 
-  // Focus
+  // hacks to get focus
   HWND hForegroundWnd=GetForegroundWindow();
   DWORD dwForegroundThread=GetWindowThreadProcessId(hForegroundWnd,NULL);
   DWORD dwMyThread=GetCurrentThreadId();
@@ -42,14 +51,14 @@ static void SpawnClipManWithArgAndExit(const char* arg) {
     AttachThreadInput(dwForegroundThread,dwMyThread,FALSE);
   }
 
-  // Clear keys
+  // clear keys so alt doesn't get stuck down
   INPUT inputs[3]={0};
   inputs[0].type=INPUT_KEYBOARD; inputs[0].ki.wVk=VK_CONTROL;
   inputs[1].type=INPUT_KEYBOARD; inputs[1].ki.wVk=VK_CONTROL; inputs[1].ki.dwFlags=KEYEVENTF_KEYUP;
   inputs[2].type=INPUT_KEYBOARD; inputs[2].ki.wVk=VK_MENU;    inputs[2].ki.dwFlags=KEYEVENTF_KEYUP;
   SendInput(3,inputs,sizeof(INPUT));
 
-  // Build cmdline
+  // build cmdline string
   GetModuleFileNameA(NULL,path,MAX_PATH);
   lstrcpyA(dir,path);
   for(int i=lstrlenA(dir)-1;i>=0;i--) {
@@ -64,7 +73,7 @@ static void SpawnClipManWithArgAndExit(const char* arg) {
   si.dwFlags=STARTF_USESHOWWINDOW;
   si.wShowWindow=SW_SHOW;
 
-  // Launch
+  // launch clipman
   if(CreateProcessA(NULL,cmd,NULL,NULL,FALSE,0,NULL,NULL,&si,&pi)) {
     WaitForInputIdle(pi.hProcess,5000);
     CloseHandle(pi.hProcess);
@@ -80,7 +89,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) 
 }
 
 void WINAPI WinMainCRTStartup(void) {
-  // Single instance
+  // if clipman watcher is already running, then just exit, don't let 2 exist
   HANDLE hMutex=CreateMutexA(NULL,FALSE,"MUTEX_clipman-watcher");
   if(!hMutex||GetLastError()==ERROR_ALREADY_EXISTS) ExitProcess(0);
 
@@ -91,7 +100,7 @@ void WINAPI WinMainCRTStartup(void) {
   wc.lpszClassName="ClipManWatcherClass";
   RegisterClassA(&wc);
 
-  // Hidden window
+  // hidden window, but a real 1x1 window, to allow us to get focus
   g_wnd=CreateWindowExA(
     WS_EX_TOOLWINDOW,
     "ClipManWatcherClass",
@@ -101,10 +110,10 @@ void WINAPI WinMainCRTStartup(void) {
     NULL,NULL,wc.hInstance,NULL
   );
 
-  // Hotkey
+  // register hotkey event
   if(!RegisterHotKey(NULL,HOTKEY_ID,MOD_ALT,VK_OEM_3)) ExitProcess(1);
 
-  // Clipboard
+  // register clipboard event
   AddClipboardFormatListener(g_wnd);
 
   while(GetMessageA(&msg,NULL,0,0)>0) {
@@ -118,7 +127,7 @@ void WINAPI WinMainCRTStartup(void) {
     DispatchMessageA(&msg);
   }
 
-  // Cleanup
+  // cleanup
   UnregisterHotKey(NULL,HOTKEY_ID);
   ExitProcess(0);
 }
