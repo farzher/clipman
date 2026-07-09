@@ -5,7 +5,7 @@ W       :: #import "Windows";
 Pack    :: #import "compress_exe";
 
 PAYLOAD_UNPACKED_SIZE :: #run get_payload_unpacked_size();
-payload_compressed :: #run File.read_entire_file(Pack.PAYLOAD_PATH);
+payload :: #run File.read_entire_file(Pack.PAYLOAD_PATH);
 
 IMAGE_DIRECTORY_ENTRY_IMPORT   :: 1;
 IMAGE_DIRECTORY_ENTRY_BASERELOC :: 5;
@@ -36,8 +36,11 @@ main :: () {
   }
   defer CloseDecompressor(decompressor);
 
+  compressed_data  := payload.data + size_of(u64);
+  compressed_count := payload.count - size_of(u64);
+
   bytes_written: u64;
-  ok = Decompress(decompressor, payload_compressed.data, xx payload_compressed.count, unpacked, xx PAYLOAD_UNPACKED_SIZE, *bytes_written);
+  ok = Decompress(decompressor, compressed_data, xx compressed_count, unpacked, xx PAYLOAD_UNPACKED_SIZE, *bytes_written);
   if ok == 0 || bytes_written != xx PAYLOAD_UNPACKED_SIZE {
     print("clipman packer: decompression failed (got %, wanted %)\n", bytes_written, PAYLOAD_UNPACKED_SIZE);
     return;
@@ -213,7 +216,8 @@ set_cwd_to_exe_location :: () {
 }
 
 get_payload_unpacked_size :: () -> s64 {
-  text := File.read_entire_file(Pack.SIZE_PATH);
-  assert(text != "", "Missing payload size file. Build first.jai in release mode so it can create the packed payload.");
-  return string_to_int(text);
+  text := File.read_entire_file(Pack.PAYLOAD_PATH);
+  assert(text.count >= size_of(u64), "Missing packed payload. Build first.jai in release mode so it can create the packed payload.");
+  size := (cast(*u64) text.data).*;
+  return xx size;
 }

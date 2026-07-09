@@ -4,7 +4,6 @@ File :: #import "File";
 
 STUB_FILEPATH :: "src/modules/compress_exe/packed_stub.jai";
 PAYLOAD_PATH  :: "release/clipman.payload.lzms";
-SIZE_PATH     :: "release/clipman.payload.size";
 
 // Builds `main_filepath` as an unpacked payload, then builds the packed stub
 // using the original output executable name.
@@ -75,8 +74,11 @@ pack :: (exe_path: string) {
   ok = Compress(compressor, exe_bytes.data, xx exe_bytes.count, compressed, compressed_count, *compressed_count);
   assert(ok != 0, "LZMS compression failed");
 
-  File.write_entire_file(PAYLOAD_PATH, compressed, xx compressed_count);
-  File.write_entire_file(SIZE_PATH, tprint("%", exe_bytes.count));
+  payload_size := size_of(u64) + compressed_count;
+  payload := alloc(xx payload_size);
+  (cast(*u64) payload).* = xx exe_bytes.count;
+  memcpy(payload + size_of(u64), compressed, xx compressed_count);
+  File.write_entire_file(PAYLOAD_PATH, payload, xx payload_size);
 
   print("Packed payload: % -> % bytes (%.2x smaller)\n", exe_bytes.count, compressed_count, cast(float)exe_bytes.count / cast(float)compressed_count);
 }
@@ -91,5 +93,4 @@ CloseCompressor  :: (CompressorHandle: *void) -> s32 #foreign cabinet;
 cleanup :: (unpacked_exe_path: string) {
   File.file_delete(unpacked_exe_path);
   File.file_delete(PAYLOAD_PATH);
-  File.file_delete(SIZE_PATH);
 }
