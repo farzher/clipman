@@ -31,8 +31,8 @@ build :: () {
     #if  RELEASE then #run Windows_Resources.disable_runtime_console();
   });
 
-  // wait for the exe to finish compiling, so we can set its icon
-  build_compile(main_filepath);
+  #if !RELEASE then build_compile(main_filepath); // normal compile
+  #if  RELEASE then Compress_Exe.compress_exe(#filepath, main_filepath, *options); // weird compressed packer compile
 
   // set exe icon
   exe_path := tprint("%1%2.exe", options.output_path, options.output_executable_name);
@@ -83,6 +83,7 @@ compiler_version_string :: #run -> string {
 #import "String";
 Windows_Resources :: #import "Windows_Resources";
 File              :: #import "File";
+Compress_Exe      :: #import,file "src/modules/compress_exe/module.jai";
 
 w: Workspace;
 options: Build_Options;
