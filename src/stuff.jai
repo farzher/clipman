@@ -547,10 +547,26 @@ pixels_to_windows_bitmap :: (pixels: string, width: s32, height: s32) -> string 
   bitmap_header.biBitCount = 8*4;
   bitmap_header.biSizeImage = xx (width*height * 4/*rgba bytes per pixel*/);
 
-  bitmap_header_str := to_stringbytes(*bitmap_header);
+  bitmap := talloc_string(size_of(BITMAPINFOHEADER) + xx bitmap_header.biSizeImage);
+  memcpy(bitmap.data, *bitmap_header, size_of(BITMAPINFOHEADER));
 
-  #import "String";
-  return join(bitmap_header_str, pixels,, temp);
+  // WebP decodes to top-down RGBA. Positive-height CF_DIB stores bottom-up BGRA rows.
+  dest := bitmap.data + size_of(BITMAPINFOHEADER);
+  for y: 0..height-1 {
+    src := pixels.data + ((height - 1 - y) * width * 4);
+
+    for 0..width-1 {
+      dest[0] = src[2];
+      dest[1] = src[1];
+      dest[2] = src[0];
+      dest[3] = src[3];
+
+      src += 4;
+      dest += 4;
+    }
+  }
+
+  return bitmap;
 }
 
 record_to_windows_bitmap :: (record: DbRecord) -> string {
