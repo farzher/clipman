@@ -7,7 +7,8 @@ Nowhere near as advanced as Ditto, but this does support db encryption https://g
 ![](https://i.imgur.com/gLrmKk0.png)
 
 # Features
-- database encryption - (only when setting a password)
+- database encryption
+- 0 dependencies, 1 exe
 - < 1MB RAM usage while idle - (with enable_watcher: 1 in clipman.json)
 - streamer mode - everytime clipman's opened all information is censored until you click or hit tab
 - images highgly compressed using webp to keep the .db file small
