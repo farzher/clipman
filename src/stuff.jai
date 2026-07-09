@@ -281,11 +281,25 @@ maybe_censor :: (str: string) -> string {
 my_font      : *Simp.Dynamic_Font;
 my_big_font  : *Simp.Dynamic_Font;
 my_tiny_font : *Simp.Dynamic_Font;
+load_clipman_font :: (pixel_height: int) -> *Simp.Dynamic_Font {
+  font: *Simp.Dynamic_Font;
+  if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "verdanaz.ttf", pixel_height);
+  if !font  font = Simp.get_font_at_size(".", "OpenSans-BoldItalic.ttf", pixel_height);
+  if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "consolab.ttf", pixel_height);
+  // if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "consolaz.ttf", pixel_height);
+  if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "segoeuiz.ttf", pixel_height);
+  if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "segoeui.ttf", pixel_height);
+  if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "arial.ttf", pixel_height);
+  if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "tahoma.ttf", pixel_height);
+  if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "verdana.ttf", pixel_height);
+
+  assert(font != null, "Unable to load a font. Tried Consolas Bold Italic/Segoe UI/Arial/Tahoma/Verdana from C:/Windows/Fonts, then external OpenSans-BoldItalic.ttf.");
+  return font;
+}
 init_font :: () {
-  font_file_bytes :: #run embed_file("bin/OpenSans-BoldItalic.ttf");
-  my_font      = Simp.get_font_at_size(font_file_bytes, 18);
-  my_big_font  = Simp.get_font_at_size(font_file_bytes, 32);
-  my_tiny_font = Simp.get_font_at_size(font_file_bytes, 12);
+  my_font      = load_clipman_font(18);
+  my_big_font  = load_clipman_font(32);
+  my_tiny_font = load_clipman_font(12);
 }
 
 
