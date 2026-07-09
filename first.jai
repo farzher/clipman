@@ -26,6 +26,7 @@ build :: () {
     #if !RELEASE then options.backend = .X64;
 
     #if  RELEASE then options.emit_debug_info = .NONE;
+    #if  RELEASE then options.backtrace_on_crash = .OFF;
     #if  RELEASE then options.output_path = "release/";
     #if  RELEASE then #run Windows_Resources.disable_runtime_console();
   });
