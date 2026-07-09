@@ -408,15 +408,132 @@ popup_menu :: (items: []string) -> string {
 
 
 
-// maybe just use imgui instead? this thing looks like trash
-// tinyfiledialogs is dumb and should be replaced
-showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
-  // DialogBoxParamW :: (hInstance: HINSTANCE, lpTemplate: LPCWSTR, hWndParent: HWND, lpDialogFunc: *void, dwInitParam: LPARAM) -> s32 #foreign user32;
-  tinyfd :: #library,no_dll "../bin/tinyfiledialogs64";
-  tinyfd_inputBox :: (title: *u8, message: *u8, defaultinput: *u8) -> *u8 #foreign tinyfd;
+inputbox_result_buffer: [4096]u8;
+inputbox_done     := false;
+inputbox_accepted := false;
+inputbox_hwnd     : HWND;
+inputbox_edit     : HWND;
 
-  // memory leak? where's the memory for the returned string? is it really on the stack?
-  return tinyfd_inputBox(title, message, ifx ispassword null else cast(*u8)"1");
+INPUTBOX_EDIT_ID   :: 1001;
+INPUTBOX_OK_ID     :: 1;
+INPUTBOX_CANCEL_ID :: 2;
+
+inputbox_accept :: () {
+  GetWindowTextA(inputbox_edit, *inputbox_result_buffer[0], xx inputbox_result_buffer.count);
+  inputbox_accepted = true;
+  inputbox_done = true;
+  DestroyWindow(inputbox_hwnd);
+}
+
+inputbox_cancel :: () {
+  inputbox_accepted = false;
+  inputbox_done = true;
+  DestroyWindow(inputbox_hwnd);
+}
+
+inputbox_wndproc :: (wnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> s64 #c_call {
+  push_context {
+    if msg == WM_COMMAND {
+      id := cast(u16)(wparam & 0xffff);
+      if id == INPUTBOX_OK_ID {
+        inputbox_accept();
+        return 0;
+      }
+      if id == INPUTBOX_CANCEL_ID {
+        inputbox_cancel();
+        return 0;
+      }
+    }
+
+    if msg == WM_CLOSE {
+      inputbox_cancel();
+      return 0;
+    }
+
+    return DefWindowProcW(wnd, msg, wparam, lparam);
+  }
+}
+
+// Minimal native input popup.
+// Returns null on cancel; otherwise returns a pointer to inputbox_result_buffer.
+showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
+  WS_EX_DLGMODALFRAME : u32 : 0x00000001;
+  WS_EX_TOPMOST       : u32 : 0x00000008;
+  WS_POPUP            : u32 : 0x80000000;
+  WS_CAPTION          : u32 : 0x00C00000;
+  WS_SYSMENU          : u32 : 0x00080000;
+  WS_VISIBLE          : u32 : 0x10000000;
+  WS_CHILD            : u32 : 0x40000000;
+  WS_TABSTOP          : u32 : 0x00010000;
+  ES_AUTOHSCROLL      : u32 : 0x0080;
+  ES_PASSWORD         : u32 : 0x0020;
+  BS_DEFPUSHBUTTON    : u32 : 0x00000001;
+  WM_KEYDOWN          :: 0x0100;
+  VK_RETURN           :: 0x0D;
+  VK_ESCAPE           :: 0x1B;
+  SM_CXSCREEN         :: 0;
+  SM_CYSCREEN         :: 1;
+  IDC_ARROW           :: cast(*s16)32512;
+  FW_NORMAL           :: 400;
+  DEFAULT_CHARSET     :: 1;
+  OUT_DEFAULT_PRECIS  :: 0;
+  CLIP_DEFAULT_PRECIS :: 0;
+  DEFAULT_QUALITY     :: 0;
+  DEFAULT_PITCH       :: 0;
+
+  inputbox_done = false;
+  inputbox_accepted = false;
+  memset(*inputbox_result_buffer[0], 0, inputbox_result_buffer.count);
+
+  hinstance := GetModuleHandleW(null);
+
+  wc: WNDCLASSEXW;
+  wc.cbSize = size_of(WNDCLASSEXW);
+  wc.lpfnWndProc = xx inputbox_wndproc;
+  wc.hInstance = hinstance;
+  wc.hCursor = LoadCursorW(null, IDC_ARROW);
+  wc.lpszClassName = utf8_to_wide("clipman_inputbox_window");
+  RegisterClassExW(*wc);
+
+  title_text := fromcstr(title);
+
+  w: s32 = 360;
+  h: s32 = 127;
+  x := (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
+  y := (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
+
+  inputbox_hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME | WS_EX_TOPMOST, wc.lpszClassName, utf8_to_wide(title_text), WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y, w, h, hwnd, null, hinstance, null);
+  if inputbox_hwnd == null return null;
+
+  inputbox_edit = CreateWindowExW(0, utf8_to_wide("EDIT"), utf8_to_wide(""), WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | (ifx ispassword then ES_PASSWORD else cast(u32)0), 12, 16, 320, 22, inputbox_hwnd, cast(HMENU)INPUTBOX_EDIT_ID, hinstance, null);
+  ok := CreateWindowExW(0, utf8_to_wide("BUTTON"), utf8_to_wide("OK"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 176, 52, 75, 24, inputbox_hwnd, cast(HMENU)INPUTBOX_OK_ID, hinstance, null);
+  cancel := CreateWindowExW(0, utf8_to_wide("BUTTON"), utf8_to_wide("Cancel"), WS_CHILD | WS_VISIBLE | WS_TABSTOP, 257, 52, 75, 24, inputbox_hwnd, cast(HMENU)INPUTBOX_CANCEL_ID, hinstance, null);
+
+  EnableWindow(hwnd, .FALSE);
+  SetForegroundWindow(inputbox_hwnd);
+  SetFocus(inputbox_edit);
+
+  msg: MSG;
+  while !inputbox_done && GetMessageW(*msg, null, 0, 0) {
+    if msg.message == WM_KEYDOWN {
+      if msg.wParam == VK_RETURN {
+        inputbox_accept();
+        continue;
+      }
+      if msg.wParam == VK_ESCAPE {
+        inputbox_cancel();
+        continue;
+      }
+    }
+    TranslateMessage(*msg);
+    DispatchMessageW(*msg);
+  }
+
+  if IsWindow(hwnd) EnableWindow(hwnd, .TRUE);
+  SetForegroundWindow(hwnd);
+
+  if !inputbox_accepted return null;
+  return *inputbox_result_buffer[0];
 }
 
 

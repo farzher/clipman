@@ -215,6 +215,10 @@ fseek  :: (stream: FILE, offset: s64, whence: s32) -> s32 #foreign Crt;
 
 VkKeyScanA :: (ch: u8) -> u16 #foreign user32;
 
+GetWindowTextA :: (hWnd: HWND, lpString: LPSTR, nMaxCount: s32) -> s32 #foreign user32;
+EnableWindow :: (hWnd: HWND, bEnable: BOOL) -> BOOL #foreign user32;
+IsWindow :: (hWnd: HWND) -> BOOL #foreign user32;
+
 
 
 
