@@ -9,7 +9,7 @@ using,only(
 
 //
 APP_NAME      :: "ClipMan";
-VERSION       :: "v0.1.0";
+VERSION       :: "v1.0.0";
 CONFIG_PATH   :: "clipman.json";
 
 // default config
@@ -273,7 +273,7 @@ update :: () {
 
     // handle search input
     GetRect.current_time = getms();
-    if event.key_code != .ARROW_UP && event.key_code != .ARROW_DOWN { // don't handle up/down arrow with getrect. it does some history navigation nonsense...
+    if visible && event.key_code != .ARROW_UP && event.key_code != .ARROW_DOWN { // don't handle up/down arrow with getrect. it does some history navigation nonsense...
       GetRect.handle_event(*search_input, event.*);
     }
 

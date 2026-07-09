@@ -219,9 +219,11 @@ to_lower :: (p: *string) {
 
 // register hotkey using a string like alt+shift+1 instead of vk key codes
 myregisterhotkey :: (hwnd: HWND, id: s32, hotkeystring: string) -> bool {
-  to_lower(*hotkeystring);
+  // hotkeystring could be readonly data, to_lower tries to mutate it, so we need a copy so we don't crash
+  hotkeystring_lower := copy_string(hotkeystring,, temp);
+  to_lower(*hotkeystring_lower);
 
-  parts := split(hotkeystring, "+");
+  parts := split(hotkeystring_lower, "+");
   mod_parts := parts; mod_parts.count -= 1; // ["alt", "shift"]
   hotkey_part := parts[parts.count-1]; // "1"
 

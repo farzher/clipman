@@ -9,8 +9,10 @@ payload :: #run File.read_entire_file(Pack.PAYLOAD_PATH);
 
 IMAGE_DIRECTORY_ENTRY_IMPORT   :: 1;
 IMAGE_DIRECTORY_ENTRY_BASERELOC :: 5;
+IMAGE_DIRECTORY_ENTRY_TLS       :: 9;
 IMAGE_REL_BASED_DIR64          :: 10;
 IMAGE_ORDINAL_FLAG64           :: cast(u64)0x8000000000000000;
+PAYLOAD_STATIC_TLS_INDEX       :: cast(u32) 0;
 
 IMAGE_SCN_MEM_EXECUTE :: 0x20000000;
 IMAGE_SCN_MEM_READ    :: 0x40000000;
@@ -18,10 +20,29 @@ IMAGE_SCN_MEM_WRITE   :: 0x80000000;
 
 COMPRESS_ALGORITHM_LZMS :: 5;
 
-cabinet :: #library,system "Cabinet";
+cabinet  :: #library,system "Cabinet";
+kernel32 :: #library,system "kernel32";
 CreateDecompressor :: (Algorithm: u32, AllocationRoutines: *void, DecompressorHandle: **void) -> s32 #foreign cabinet;
 Decompress         :: (DecompressorHandle: *void, CompressedData: *void, CompressedDataSize: u64, UncompressedBuffer: *void, UncompressedBufferSize: u64, UncompressedDataSize: *u64) -> s32 #foreign cabinet;
 CloseDecompressor  :: (DecompressorHandle: *void) -> s32 #foreign cabinet;
+
+ntdll :: #library,system "ntdll";
+
+THREAD_BASIC_INFORMATION :: struct {
+  ExitStatus: s32;
+  TebBaseAddress: *u8;
+  ClientId_UniqueProcess: *void;
+  ClientId_UniqueThread: *void;
+  AffinityMask: u64;
+  Priority: s32;
+  BasePriority: s32;
+}
+
+ThreadBasicInformation :: 0;
+CURRENT_THREAD_HANDLE  :: cast(*void) -2;
+TEB_THREAD_LOCAL_STORAGE_POINTER_OFFSET :: 0x58; // x64 TEB.ThreadLocalStoragePointer
+
+NtQueryInformationThread :: (ThreadHandle: *void, ThreadInformationClass: u32, ThreadInformation: *void, ThreadInformationLength: u32, ReturnLength: *u32) -> s32 #foreign ntdll;
 
 main :: () {
   set_cwd_to_exe_location();
@@ -93,6 +114,7 @@ run_pe_from_memory :: (pe: *u8) -> bool {
   }
 
   if !resolve_imports(image, opt) return false;
+  if !initialize_tls(image, opt) return false;
 
   protect_sections(image, pe, opt, xx size_of_optional_header, number_of_sections);
 
@@ -130,6 +152,60 @@ apply_relocations :: (image: *u8, opt: u32, delta: s64) -> bool {
     cursor += block_size;
   }
 
+  return true;
+}
+
+initialize_tls :: (image: *u8, opt: u32) -> bool {
+  tls_rva  := read_u32(image, opt + 112 + IMAGE_DIRECTORY_ENTRY_TLS*8 + 0);
+  tls_size := read_u32(image, opt + 112 + IMAGE_DIRECTORY_ENTRY_TLS*8 + 4);
+  if tls_rva == 0 || tls_size == 0 return true;
+
+  // PE TLS directory fields are VAs, not RVAs. apply_relocations() has already
+  // fixed them up for this manually mapped image.
+  start_raw            := read_u64(image, tls_rva + 0);
+  end_raw              := read_u64(image, tls_rva + 8);
+  address_of_index     := read_u64(image, tls_rva + 16);
+  address_of_callbacks := read_u64(image, tls_rva + 24);
+  size_of_zero_fill    := read_u32(image, tls_rva + 32);
+
+  // This image is being mapped as the effective main executable.  In a normal
+  // process the main EXE's static TLS index is 0.  Do not use TlsAlloc here:
+  // that allocates Win32 dynamic TLS, but MSVC/C TLS reads through
+  // TEB.ThreadLocalStoragePointer[_tls_index].
+  tls_index := PAYLOAD_STATIC_TLS_INDEX;
+  (cast(*u32) address_of_index).* = tls_index;
+
+  raw_size := end_raw - start_raw;
+  block_size := raw_size + xx size_of_zero_fill;
+  if block_size {
+    tls_block := alloc(xx block_size);
+    memset(tls_block, 0, xx block_size);
+    if raw_size memcpy(tls_block, cast(*void) start_raw, xx raw_size);
+    if !set_static_tls_value_for_current_thread(tls_index, tls_block) return false;
+  }
+
+  if address_of_callbacks {
+    Callback :: #type (module: *void, reason: u32, reserved: *void) -> void #c_call;
+    callback_ptr := cast(**void) address_of_callbacks;
+    while callback_ptr.* {
+      callback := cast(Callback) callback_ptr.*;
+      callback(image, W.DLL_PROCESS_ATTACH, null);
+      callback_ptr += 1;
+    }
+  }
+
+  return true;
+}
+
+set_static_tls_value_for_current_thread :: (tls_index: u32, tls_block: *void) -> bool {
+  info: THREAD_BASIC_INFORMATION;
+  status := NtQueryInformationThread(CURRENT_THREAD_HANDLE, ThreadBasicInformation, *info, size_of(THREAD_BASIC_INFORMATION), null);
+  if status < 0 || !info.TebBaseAddress return false;
+
+  vector := (cast(***void) (info.TebBaseAddress + TEB_THREAD_LOCAL_STORAGE_POINTER_OFFSET)).*;
+  if !vector return false;
+
+  (vector + tls_index).* = tls_block;
   return true;
 }
 

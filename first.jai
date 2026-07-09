@@ -31,6 +31,7 @@ build :: () {
     #if  RELEASE then #run Windows_Resources.disable_runtime_console();
   });
 
+  // wait for the exe to compile so we can then set the icon
   #if !RELEASE then build_compile(main_filepath); // normal compile
   #if  RELEASE then Compress_Exe.compress_exe(#filepath, main_filepath, *options); // weird compressed packer compile
 
