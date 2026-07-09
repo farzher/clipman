@@ -265,7 +265,7 @@ Compiler :: #import "Compiler";
 // isrelease :: #run Compiler.get_build_options().optimization_level == .RELEASE;
 RELEASE :: #run Compiler.get_build_options().array_bounds_check == .OFF;
 
-tallocator :: __temporary_allocator;
+tallocator :: temp;
 tfree :: reset_temporary_storage;
 tget :: get_temporary_storage_mark;
 tset :: set_temporary_storage_mark;

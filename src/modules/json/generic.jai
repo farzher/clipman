@@ -346,7 +346,7 @@ parse_object :: (str: string) -> result: JSON_Object, remainder: string, success
 		return result, remainder, true;
 	}
 
-	init(*result, 32);
+	table_resize(*result, 32);
 	while true {
 		if remainder[0] != #char "\""	return result, remainder, false;
 

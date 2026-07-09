@@ -7,7 +7,7 @@ using #import "Clipboard";
 
     os_clipboard_get_file :: (hwnd: HWND) -> [..]string {
         files: [..] string;
-        files.allocator = __temporary_allocator;
+        files.allocator = temp;
 
         if !IsClipboardFormatAvailable(CF_HDROP) return files;
 

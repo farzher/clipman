@@ -549,7 +549,6 @@ parse_object :: (str: string, slot: *u8, info: *Type_Info_Struct, ignore_unknown
     // @Speed: Building this table every time is pretty silly.
     // We should probably either not build it at all or cache it somewhere.
 	member_table: Table(string, Member_Offset);
-	init(*member_table);
 	defer deinit(*member_table);
 
 	if info fill_member_table(*member_table, info, rename);

@@ -1,2 +1,2 @@
-jai first.jai -release || pause
+jai first.jai -optimized || pause
 pause
