@@ -205,20 +205,8 @@ maybe_quit_to_watcher :: () {
 
 
 init_db :: (key: string = "") {
-  db.open(temp_c_string(config.db_name));
-
-  is_db_locked = !db.query("select 1 from sqlite_master");
-
-  // if db is locked then attempt to decrypt it using the provided key or config.rememeber_password
-  if is_db_locked {
-    db.open(temp_c_string(config.db_name)); // idk why it seems required to reopen the db first
-    if key != "" then db.key(key);
-    if !key && config.remember_password then db.key(config.remember_password);
-
-    // if db is still locked, return
-    is_db_locked = !db.query("select 1 from sqlite_master");
-    if is_db_locked then return;
-  }
+  is_db_locked = !db.open_and_unlock(config.db_name, key, config.remember_password);
+  if is_db_locked then return;
 
   db.query(#string SQL
     CREATE TABLE IF NOT EXISTS copy (
@@ -253,7 +241,6 @@ init_db :: (key: string = "") {
     STR));
   }
 }
-
 
 ignore_next_blur := false;
 update :: () {
@@ -421,8 +408,8 @@ update :: () {
 
                 if confirmpassword != password then break;
 
-                db.rekey(password);
-                mylog("rekey() with pw:", password);
+                success := db.encrypt_with_password(config.db_name, password);
+                is_db_locked = !success;
 
             }
 

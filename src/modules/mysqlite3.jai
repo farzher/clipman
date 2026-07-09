@@ -1,23 +1,131 @@
-#import,dir "sqlite3";
+#import,dir "sqlcipher";
 #import "Basic";
 #import,file "mybasic.jai";
+
+BOOL  :: s32;
+DWORD :: u32;
+DeleteFileA :: (filename: *u8) -> BOOL #foreign kernel32;
+CopyFileA   :: (existing_filename: *u8, new_filename: *u8, fail_if_exists: BOOL) -> BOOL #foreign kernel32;
+MoveFileExA :: (existing_filename: *u8, new_filename: *u8, flags: DWORD) -> BOOL #foreign kernel32;
+GetLastError :: () -> DWORD #foreign kernel32;
+MOVEFILE_REPLACE_EXISTING :: 0x00000001;
+MOVEFILE_COPY_ALLOWED      :: 0x00000002;
 
 // if you need to open multiple db at the same time, use this module param
 // to load a separate instane of this module, which will have a separate db.
 #module_parameters(id: string = "");
 
 db: *sqlite3db;
+is_encrypted := false;
 
 open :: (filename: *u8) -> err: bool {
   // TODO: if the file doesn't exist it creates a db for you and does not error. this isn't always what i want
+  force_link_system_libs();
   err : bool = xx sqlite3_open(filename, *db);
   if err then mylog("open error:", to_string(sqlite3_errmsg(db)));
   return err;
 }
-close :: () {sqlite3_close(db); }
+close :: () -> bool {
+  result := sqlite3_close(db);
+  if result != SQLITE_OK {
+    mylog("sqlite3_close failed:", result, to_string(sqlite3_errmsg(db)));
+    return false;
+  }
+  return true;
+}
 
-key :: (password: string) {sqlite3_key(db, password.data, xx password.count); }
-rekey :: (password: string) {sqlite3_rekey(db, password.data, xx password.count); }
+open_and_unlock :: (filename: string, password: string = "", remembered_password: string = "") -> bool {
+  is_encrypted = false;
+
+  open(to_c_string(filename));
+  if query("select 1 from sqlite_master") return true;
+
+  close();
+  open(to_c_string(filename));
+
+  attempted_key := false;
+  if password != "" {
+    key(password);
+    attempted_key = true;
+  } else if remembered_password {
+    key(remembered_password);
+    attempted_key = true;
+  }
+
+  unlocked := query("select 1 from sqlite_master");
+  if unlocked is_encrypted = attempted_key;
+  return unlocked;
+}
+
+key :: (password: string) -> bool { return sqlite3_key(db, password.data, xx password.count) == SQLITE_OK; }
+rekey :: (password: string) -> bool { return sqlite3_rekey(db, password.data, xx password.count) == SQLITE_OK; }
+
+replace_db_file :: (filename: string, replacement_filename: string) -> bool {
+  if !close() return false;
+
+  moved := MoveFileExA(to_c_string(replacement_filename), to_c_string(filename), MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED);
+  if moved return true;
+
+  move_error := GetLastError();
+
+  // Fallback for cases where rename/replace fails but overwrite-copy is allowed.
+  copied := CopyFileA(to_c_string(replacement_filename), to_c_string(filename), 0);
+  if copied {
+    DeleteFileA(to_c_string(replacement_filename));
+    return true;
+  }
+
+  mylog("failed to replace database file. MoveFileEx error:", move_error, "CopyFile error:", GetLastError());
+  return false;
+}
+
+export_and_replace_db :: (filename: string, suffix: string, replacement_password: string) -> bool {
+  tmp_filename := tprint("%%", filename, suffix);
+  DeleteFileA(to_c_string(tmp_filename));
+
+  success := query("ATTACH DATABASE ? AS replacement KEY ?", tmp_filename, replacement_password);
+  success = success && query("SELECT sqlcipher_export('replacement')");
+  success = query("DETACH DATABASE replacement") && success;
+  if !success {
+    mylog("failed to export replacement database");
+    DeleteFileA(to_c_string(tmp_filename));
+    return false;
+  }
+
+  replaced := replace_db_file(filename, tmp_filename);
+  open(to_c_string(filename));
+  return replaced;
+}
+
+encrypt_with_password :: (filename: string, password: string) -> bool {
+  // Empty password means remove encryption. SQLCipher can't use rekey("") for
+  // this, so export into a new plaintext DB and replace the encrypted file.
+  if password.count == 0 {
+    if !is_encrypted return true;
+
+    if !export_and_replace_db(filename, ".decrypted", "") {
+      is_encrypted = true;
+      return false;
+    }
+
+    is_encrypted = false;
+    return query("select 1 from sqlite_master");
+  }
+
+  // Already-encrypted DBs can use SQLCipher's rekey API.
+  if is_encrypted {
+    success := rekey(password);
+    if !success mylog("failed to rekey encrypted database");
+    return success;
+  }
+
+  // Plaintext -> encrypted must be done by exporting into a new keyed DB.
+  if !export_and_replace_db(filename, ".encrypted", password) return false;
+
+  key(password);
+  is_encrypted = query("select 1 from sqlite_master");
+  return is_encrypted;
+}
 
 select :: (sql: *u8, binds: .. Any) -> *sqlite3_stmt {
 
