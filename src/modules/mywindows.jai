@@ -216,6 +216,8 @@ fseek  :: (stream: FILE, offset: s64, whence: s32) -> s32 #foreign Crt;
 VkKeyScanA :: (ch: u8) -> u16 #foreign user32;
 
 GetWindowTextA :: (hWnd: HWND, lpString: LPSTR, nMaxCount: s32) -> s32 #foreign user32;
+CreateFontW :: (cHeight: s32, cWidth: s32, cEscapement: s32, cOrientation: s32, cWeight: s32, bItalic: DWORD, bUnderline: DWORD, bStrikeOut: DWORD, iCharSet: DWORD, iOutPrecision: DWORD, iClipPrecision: DWORD, iQuality: DWORD, iPitchAndFamily: DWORD, pszFaceName: LPCWSTR) -> HANDLE #foreign gdi;
+SendMessageW :: (hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> LRESULT #foreign user32;
 EnableWindow :: (hWnd: HWND, bEnable: BOOL) -> BOOL #foreign user32;
 IsWindow :: (hWnd: HWND) -> BOOL #foreign user32;
 

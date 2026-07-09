@@ -468,6 +468,7 @@ showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
   ES_AUTOHSCROLL      : u32 : 0x0080;
   ES_PASSWORD         : u32 : 0x0020;
   BS_DEFPUSHBUTTON    : u32 : 0x00000001;
+  WM_SETFONT          :: 0x0030;
   WM_KEYDOWN          :: 0x0100;
   VK_RETURN           :: 0x0D;
   VK_ESCAPE           :: 0x1B;
@@ -508,6 +509,11 @@ showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
   inputbox_edit = CreateWindowExW(0, utf8_to_wide("EDIT"), utf8_to_wide(""), WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | (ifx ispassword then ES_PASSWORD else cast(u32)0), 12, 16, 320, 22, inputbox_hwnd, cast(HMENU)INPUTBOX_EDIT_ID, hinstance, null);
   ok := CreateWindowExW(0, utf8_to_wide("BUTTON"), utf8_to_wide("OK"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 176, 52, 75, 24, inputbox_hwnd, cast(HMENU)INPUTBOX_OK_ID, hinstance, null);
   cancel := CreateWindowExW(0, utf8_to_wide("BUTTON"), utf8_to_wide("Cancel"), WS_CHILD | WS_VISIBLE | WS_TABSTOP, 257, 52, 75, 24, inputbox_hwnd, cast(HMENU)INPUTBOX_CANCEL_ID, hinstance, null);
+
+  font := CreateFontW(-12, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, utf8_to_wide("Segoe UI"));
+  SendMessageW(inputbox_edit, WM_SETFONT, xx font, 1);
+  SendMessageW(ok, WM_SETFONT, xx font, 1);
+  SendMessageW(cancel, WM_SETFONT, xx font, 1);
 
   EnableWindow(hwnd, .FALSE);
   SetForegroundWindow(inputbox_hwnd);
