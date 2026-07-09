@@ -65,8 +65,7 @@ main :: () {
   // but i don't want to deal with setting cmd args on startup, or changing the startup exe to the watcher
   // so if config is set to use watcher, and we we're not spawned by watcher, instantly kill ourselves and spawn watcher
     if config.enable_watcher && !cmd_arg_spawned_by_watcher {
-      p: Process.Process;
-      success := Process.create_process(*p, "clipman-watcher.exe", kill_process_if_parent_exits = false);
+      spawn_embedded_watcher();
       return;
     }
 
@@ -160,6 +159,18 @@ init_everything :: () {
 
 }
 
+embedded_watcher_exe_bytes :: #run embed_file("bin/clipman-watcher.exe");
+
+spawn_embedded_watcher :: () -> bool {
+  File :: #import "File";
+
+  watcher_path :: "clipman-watcher.exe";
+  File.write_entire_file(watcher_path, embedded_watcher_exe_bytes.data, embedded_watcher_exe_bytes.count);
+
+  p: Process.Process;
+  return Process.create_process(*p, watcher_path, kill_process_if_parent_exits = false);
+}
+
 maybe_quit_to_watcher :: () {
   if !cmd_arg_spawned_by_watcher && !config.enable_watcher return;
   if visible return;
@@ -168,8 +179,7 @@ maybe_quit_to_watcher :: () {
   if ms_since_last_interation > 1000*60*5/*5 min*/ {
   // if ms_since_last_interation > 1000*60*0.05/*small min*/ {
     UnregisterHotKey(hwnd, 0);
-    p: Process.Process;
-    success := Process.create_process(*p, "clipman-watcher.exe", kill_process_if_parent_exits = false);
+    spawn_embedded_watcher();
     quit = true;
   }
 }
