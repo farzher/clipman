@@ -596,96 +596,10 @@ dedent :: (_str: string, glue := "\n") -> string {
   }
 }
 
-// We intentionally do not #import "Curl" here. That would put libcurl.dll in
-// clipman.exe's import table, which means Windows would try to load it before
-// our code can extract the embedded DLL. Instead, embed libcurl.dll directly in
-// the exe, extract it to temp, LoadLibrary it, and bind the handful of functions
-// we need with GetProcAddress.
-CURL :: void;
-curl_slist :: struct { data: *u8; next: *curl_slist; }
-
-CURLcode :: enum s32 {
-  OK          :: 0;
-  FAILED_INIT :: 2;
-}
-
-CURLoption :: enum s32 {
-  WRITEDATA      :: 10001;
-  URL            :: 10002;
-  WRITEFUNCTION  :: 20011;
-  TIMEOUT        :: 13;
-  POSTFIELDS     :: 10015;
-  HTTPHEADER     :: 10023;
-  CUSTOMREQUEST  :: 10036;
-  HEADER         :: 42;
-  NOBODY         :: 44;
-  FOLLOWLOCATION :: 52;
-  SSL_VERIFYPEER :: 64;
-  SSL_VERIFYHOST :: 81;
-}
-
-CURLINFO :: enum s32 {
-  RESPONSE_CODE :: 2097154;
-}
-
-curl_easy_init:    #type () -> *CURL #c_call;
-curl_easy_setopt:  #type (curl: *CURL, option: CURLoption, __args: ..Any) -> CURLcode #c_call;
-curl_easy_perform: #type (curl: *CURL) -> CURLcode #c_call;
-curl_easy_cleanup: #type (curl: *CURL) -> void #c_call;
-curl_easy_getinfo: #type (curl: *CURL, info: CURLINFO, __args: ..Any) -> CURLcode #c_call;
-curl_slist_append: #type (list: *curl_slist, str: *u8) -> *curl_slist #c_call;
-curl_slist_free_all: #type (list: *curl_slist) -> void #c_call;
-
-libcurl_dll_bytes :: #run embed_file("C:/jai/modules/Curl/windows/lib/libcurl.dll");
-
-libcurl_loaded := false;
-load_embedded_libcurl :: () -> bool {
-  if libcurl_loaded return true;
-
-  Windows :: #import "Windows";
-  File    :: #import "File";
-
-  MAX_PATH :: 260;
-
-  kernel32 :: #library,system "kernel32";
-  GetTempPathA :: (nBufferLength: Windows.DWORD, lpBuffer: *u8) -> Windows.DWORD #foreign kernel32;
-
-  temp_buf: [MAX_PATH] u8;
-  temp_len := GetTempPathA(MAX_PATH, temp_buf.data);
-  if !temp_len || temp_len >= MAX_PATH { mylog("GetTempPathA failed"); return false; }
-
-  temp_path: string;
-  temp_path.data = temp_buf.data;
-  temp_path.count = temp_len;
-  dll_path := tprint("%clipman-libcurl-8.5.0.dll", temp_path);
-
-  File.write_entire_file(dll_path, libcurl_dll_bytes.data, libcurl_dll_bytes.count);
-
-  dll := Windows.LoadLibraryA(temp_c_string(dll_path));
-  if !dll { mylog("LoadLibraryA failed for %", dll_path); return false; }
-
-  bind :: (dll: Windows.HMODULE, name: string) -> *void {
-    proc := Windows.GetProcAddress(dll, temp_c_string(name));
-    if !proc mylog("GetProcAddress failed for %", name);
-    return proc;
-  }
-
-  curl_easy_init      = cast(type_of(curl_easy_init))      bind(dll, "curl_easy_init");
-  curl_easy_setopt    = cast(type_of(curl_easy_setopt))    bind(dll, "curl_easy_setopt");
-  curl_easy_perform   = cast(type_of(curl_easy_perform))   bind(dll, "curl_easy_perform");
-  curl_easy_cleanup   = cast(type_of(curl_easy_cleanup))   bind(dll, "curl_easy_cleanup");
-  curl_easy_getinfo   = cast(type_of(curl_easy_getinfo))   bind(dll, "curl_easy_getinfo");
-  curl_slist_append   = cast(type_of(curl_slist_append))   bind(dll, "curl_slist_append");
-  curl_slist_free_all = cast(type_of(curl_slist_free_all)) bind(dll, "curl_slist_free_all");
-
-  libcurl_loaded = curl_easy_init && curl_easy_setopt && curl_easy_perform && curl_easy_cleanup && curl_easy_getinfo && curl_slist_append && curl_slist_free_all;
-  return libcurl_loaded;
-}
+#import,dir "curl";
 
 // Allocates response_body using context.allocator
 request :: (url: string, data := "", method := "", headers := string.[], include_headers := false, follow_redirects := true, timeout_seconds := 0) -> response_body: string, response_code: int, curl_code: CURLcode {
-
-  if !load_embedded_libcurl() return "", 0, .FAILED_INIT;
 
   size_t :: u64;
   write_callback :: (ptr: *u8, size: size_t, nmemb: size_t, userdata: *void) -> size_t #c_call {
