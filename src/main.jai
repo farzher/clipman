@@ -712,15 +712,15 @@ update_records :: () {
   the_select_from :: "select id, preview, last_seen_at, first_seen_at, count, type, bytecount from copy";
   rows: type_of(db.select(""));
 
-  if starts_with(search_input.text, "id:") {
+  if String.starts_with(search_input.text, "id:") {
     id_str := substr(search_input.text, "id:".count, -"id:".count);
-    id := parse_int(*id_str);
+    id := String.parse_int(*id_str);
     if id {
       rows = db.select(to_c_string(interp("${the_select_from} where id=? limit 1"),, temp), id);
     }
 
   } else if search_input.text.count {
-    words := split(search_input.text, " ");
+    words := String.split(search_input.text, " ");
     if(words.count > 1) {
       where_arr: [..]string;
       where_arr.allocator = temp;
@@ -729,7 +729,7 @@ update_records :: () {
         array_add(*where_arr, interp("preview like '%${word}%'"));
       }
 
-      where_string := join(..where_arr, " AND ",, temp);
+      where_string := String.join(..where_arr, " AND ",, temp);
 
       rows = db.select(to_c_string(interp("${the_select_from} where type=? and ${where_string} ORDER BY %{order_by} DESC LIMIT ? OFFSET ?"),, temp), cast(int)COPY_TYPE.TEXT, max_records, scroll_offset);
     } else {
@@ -964,17 +964,16 @@ insert_into_db :: (_str: string, _copy_type: COPY_TYPE = .TEXT) {
   copy_type := _copy_type; // to make it not immutable
   if _copy_type == .BITMAP then str = compress(str);
 
-  if_the_image_is_big_compress_it :: () #expand {
-    if _copy_type == .BITMAP {
-      // if str.count > 10000 {
-        webpbytes := windows_bitmap_to_webp(_str, quality=90);
-        if webpbytes.count > str.count return;
+  // if_the_image_is_big_compress_it
+  if _copy_type == .BITMAP {
+    // if str.count > 10000 {
+      webpbytes := windows_bitmap_to_webp(_str, quality=90);
+      if webpbytes.count < str.count {
         str = webpbytes;
         copy_type = .WEBP;
-      // }
-    }
+      }
+    // }
   }
-  if_the_image_is_big_compress_it();
 
   // if this record has already been inserted, just update it instead of inserting a copy
   existing_record_id: int;
@@ -1125,8 +1124,6 @@ MAX_LINE_COUNT :: 60;  // only for rendering performance
 // all the junk we depend on
 // all the junk we depend on
 
-// RELEASE :: #run () -> bool {Compiler :: #import "Compiler"; return Compiler.get_build_options().optimization_level == .RELEASE; }();
-// #import "Basic"()(MEMORY_DEBUGGER=true);
 #import "Basic";
 #import,file "modules/mybasic.jai";
 #import,file "modules/mywindows.jai";
@@ -1152,5 +1149,5 @@ GetRect :: #import "GetRect";
 #import "Windows_Utf8";
 
 String        :: #import "String";
-Strings       :: #import,dir "modules/jai-string/Strings"(INDEX_ALGORITHM=.SUPER_SIMPLE);
+Strings       :: #import,dir "modules/jai-string/Strings";
 for_expansion :: Strings.for_expansion; // this is gross
