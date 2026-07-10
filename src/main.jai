@@ -96,6 +96,7 @@ main :: () {
       render();
       tfree();
     } else {
+      clear_records(); // hidden windows do not need DB previews/image blobs
       tfree();
       trim_process_working_set();
       WaitMessage();
@@ -128,17 +129,12 @@ is_config_parse_error : bool;
 order_by := "last_seen_at";
 
 init_data :: () {
-
-  // init_crash_log();
-
   init_db();
 
   records = NewArray(max_records, DbRecord);
+  records.count = 0;
 
   GetRect.activate(*search_input);
-
-  update_records();
-
 }
 
 ui_inited := false;
@@ -149,35 +145,6 @@ init_ui :: () {
   Simp.set_render_target(hwnd);
   init_font();
 }
-
-// // redirect stderr to a crash.log file
-// // so we can actually know why it crashed in release builds
-// // this is annoying because it creates a crash.log even if it never crashed
-// // also it keeps the crash.log file open forever
-// // also this sucks because the original stderr isn't printed to the console anymore
-// init_crash_log :: () {
-//   #if !RELEASE return;
-
-//   // create / open the crash.log file so we can get a handle to it
-//   crash_log_handle: FILE;
-//   fopen_s(*crash_log_handle, "crash.log", "a");
-//   SEEK_END :: 2;
-//   fseek(crash_log_handle, 0, SEEK_END); // "a" for append isn't working... ? idk, i need fseek to not overwrite the file
-
-//   // rewrite stderr to our crash.log file
-//   stderr_fileno :: 2;
-//   dup2success := _dup2(_fileno(crash_log_handle), stderr_fileno);
-//   if dup2success != 0 {
-//     mylog("crash.log failed to initialize ...");
-//     return;
-//   }
-
-//   mylog("*** Program Started Running at: UTC", getutc(), "***", to_standard_error=true);
-
-//   Debug :: #import "Debug"(USE_GRAPHICS=true);
-//   Debug.init();
-//   Debug.enable_signal_handler(interactive=true);
-// }
 
 
 init_db :: (key: string = "") {
@@ -308,10 +275,9 @@ update :: () {
 
 
       case .HOTKEY; // when you hit the global hotkey, toggle the window
-        visible = !visible;
-        if visible set_window_pos_to_mouse(hwnd);
-
-        show_window(xx ifx visible then SW_SHOW else SW_HIDE);
+        new_visible := !visible;
+        if new_visible set_window_pos_to_mouse(hwnd);
+        show_window(new_visible);
 
 
       case .MOUSE_WHEEL; // mouse wheel scrolling
@@ -407,7 +373,7 @@ update :: () {
     ensure_selection_in_range();
   }
 
-  if previous_scroll_offset != scroll_offset || previous_search_string != search_input.text
+  if visible && (previous_scroll_offset != scroll_offset || previous_search_string != search_input.text)
     update_records();
 }
 
@@ -428,10 +394,12 @@ render :: () {
     hover_index = ifx is_mouse_in_right_half then mouse.y/config.record_height else -1;
   }
 
+  requests_finished := TextureCache.upload_completed_requests();
+
   #if ONLY_RENDER_WHEN_CHANGED {
 
     // if nothing changed, just sleep, don't render anything. the pervious frame will still be shown.
-    nothing_changed := render_dirty_info.hover_index == hover_index && !render_dirty_info.new_event;
+    nothing_changed := render_dirty_info.hover_index == hover_index && !render_dirty_info.new_event && !requests_finished;
     if nothing_changed { sleep_milliseconds(1); return; }
 
     render_dirty_info.new_event = false; // set new_event as false when we render
@@ -660,10 +628,13 @@ render :: () {
 
 
 
-update_records :: () {
-  // free existing records
-  for records  free(it.preview); // perf: could write all records strings into a single buffer, then i'd never need to free it, just overwrite
+clear_records :: () {
+  for records free(it.preview);
   records.count = 0;
+}
+
+update_records :: () {
+  clear_records();
 
   // reset order back to default if we scroll top the top or start searching
   if order_by == "bytecount" {
@@ -869,7 +840,7 @@ on_copy :: () {
   bmpinfobytes := os_clipboard_get_bitmap(hwnd);
   if bmpinfobytes.count {
     insert_into_db(bmpinfobytes, .BITMAP);
-    update_records();
+    if visible update_records();
     return;
   }
 
@@ -880,14 +851,14 @@ on_copy :: () {
     }
     str := String.join(..files, separator="\n",, tallocator);
     insert_into_db(str, .FILE);
-    update_records();
+    if visible update_records();
     return;
   }
 
   clip_text := os_clipboard_get_text(); defer free(clip_text);
   if clip_text.count {
     insert_into_db(clip_text, .TEXT);
-    update_records();
+    if visible update_records();
     return;
   }
 }

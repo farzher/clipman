@@ -11,65 +11,45 @@
 
 
 
-// for making curl requests in the background
-// you can spam call req := request_q.get(url), it will only make the request once
-// once it's req.ready(req) you can use the req.response, then req.free(req) it
-// // example:
-// req := request_q.get("farzher.com/404");
-// if req.ready(req) {
-//   mylog(req.response); // Cannot GET /404
-//   req.free(req);
-// }
+// Remote preview downloads live here only until the main thread uploads them
+// into TextureCache. Limiting the queue also bounds responses held while hidden.
 request_q: struct {
-  // #import,dir "modules/Request";
   #import "Thread";
 
-  request_cache   : Table(string, *Request);
-  thread_group    : Thread_Group;
-  inited          := false;
+  MAX_PENDING :: 12;
+
+  request_cache : Table(int, *Request);
+  thread_group  : Thread_Group;
+  inited        := false;
 
   Request :: struct {
-    url           : string;
-    response      : string;
-    status        : enum {NONE; FETCHING; DONE;};
-    created_at_ms : float64;
-    ready         :: (req: Request) -> bool { return req.status == .DONE; }
-    free          :: request_q.free;
+    record_id : int;
+    url       : string;
+    response  : string;
   }
 
-
-  get :: (url: string) -> *Request {
+  start :: (record_id: int, url: string) {
     ensure_init();
 
-    found, req := table_find(*request_q.request_cache, url);
-    if found return req;
+    found, req := table_find(*request_q.request_cache, record_id);
+    if found || request_q.request_cache.count >= MAX_PENDING return;
 
     req = New(Request);
-    req.created_at_ms = getms();
-    req.status = .FETCHING;
-    req.url = copy_string(url); // url may be in temp storage
-    table_add(*request_q.request_cache, req.url, req);
+    req.record_id = record_id;
+    req.url = copy_string(url); // url may be in temporary storage
+    table_add(*request_q.request_cache, record_id, req);
     add_work(*request_q.thread_group, req, req.url);
-    return req;
   }
-
 
   free :: (req: *Request) {
-    table_remove(*request_q.request_cache, req.url);
+    table_remove(*request_q.request_cache, req.record_id);
     free(req.url);
     if req.response free(req.response);
-    free(cast(*void)req); // cast so we call basic.free and not this free
+    free(cast(*void)req); // cast so we call Basic.free, not this procedure
   }
 
-  free_all_old_finished_requests :: () {
-    MAX_AGE_MS :: 5000;
-
-    now := getms();
-    for req: request_q.request_cache {
-      if !req.ready(req) continue;
-      if (now - req.created_at_ms) < MAX_AGE_MS continue;
-      req.free(req);
-    }
+  take_completed :: () -> [] *void {
+    return get_completed_work(*request_q.thread_group);
   }
 
   ensure_init :: () {
@@ -77,29 +57,21 @@ request_q: struct {
 
     request_q.thread_group.name = "request_q.thread_group";
     request_q.thread_group.logging = false;
-    thread_count :: 12; // how many images we can load at the same time
-    init(*request_q.thread_group, thread_count, request_q.thread_do_work);
+    init(*request_q.thread_group, MAX_PENDING, request_q.thread_do_work);
     start(*request_q.thread_group);
   }
 
   thread_do_work :: (group: *Thread_Group, thread: *Thread, work: *void) -> Thread_Continue_Status {
     req := cast(*Request)work;
-
     req.response = request(req.url, timeout_seconds=2);
-    req.status = .DONE;
-    #if ONLY_RENDER_WHEN_CHANGED render_dirty_info.new_event = true;
-
     return .CONTINUE;
   }
 }
 
 
 
-// TextureCache.get_texture_for_record will return from the cache if it exists,
-// or put it in the cache and return it.
-// the cache uses my_lru_cache which probably should be improved.
-// this will keep up to MAX_RECORDS textures around in ram forever. would be nice to delete
-// old stuff when clipman isn't in use for a while
+// TextureCache owns up to MAX_RECORDS GPU textures while the window is open.
+// Eviction deletes the GL handle, and show_window(false) empties the whole cache.
 TextureCache: struct {
   #import,file "modules/my_lru_cache.jai";
 
@@ -113,6 +85,26 @@ TextureCache: struct {
     glDeleteTextures(1, *texture.gl_handle);
   }
 
+  upload_completed_requests :: () -> bool {
+    if !request_q.inited || !request_q.request_cache.count return false;
+
+    completed := request_q.take_completed();
+    for work: completed {
+      req := cast(*request_q.Request)work;
+      if req.response upload_response(req.record_id, req.response);
+      request_q.free(req);
+    }
+    return completed.count > 0;
+  }
+
+  upload_response :: (record_id: int, response: string) {
+    push_treset();
+
+    texture: Simp.Texture;
+    if Simp.texture_load_from_memory(*texture, xx response)
+      add(*TextureCache.texture_cache, record_id, texture);
+  }
+
   get_texture_for_record :: (record: DbRecord) -> *Simp.Texture {
     can_fetch_img_from_record_text := can_fetch_img_from_text(record.preview);
 
@@ -123,21 +115,15 @@ TextureCache: struct {
     textureptr := find_pointer(TextureCache.texture_cache, record.id);
     if textureptr then return textureptr;
 
-    // url records require different processing than normal bitmap records
     if can_fetch_img_from_record_text {
-
-      request_q.free_all_old_finished_requests(); // todo: this shouldn't be here
-      req := request_q.get(get_img_url_from_text(record.preview));
-      if !req.ready(req) return null;
-      defer req.free(req);
-      if !req.response return null;
-
-      texture: Simp.Texture;
-      Simp.texture_load_from_memory(*texture, xx req.response);
-      return add(*TextureCache.texture_cache, record.id, texture);
+      request_q.start(record.id, get_img_url_from_text(record.preview));
+      return null;
     }
 
     if is_image(record) {
+      // Image decoding uses several temporary full-size buffers. Release them
+      // after each upload instead of accumulating every image until frame end.
+      push_treset();
       bitmap := windows_bitmap_to_simp_bitmap(record_to_windows_bitmap(record));
       texture: Simp.Texture;
       Simp.texture_load_from_bitmap(*texture, *bitmap);
@@ -297,6 +283,10 @@ load_clipman_font :: (pixel_height: int) -> *Simp.Dynamic_Font {
   return font;
 }
 init_font :: () {
+  // Simp's default 2048x1024 RGBA atlas reserves 8 MB in both RAM and GPU
+  // memory. This grows additional pages as needed, so start at a saner size.
+  Simp.init_fonts(1024, 512);
+
   my_font      = load_clipman_font(18);
   my_big_font  = load_clipman_font(32);
   my_tiny_font = load_clipman_font(12);
@@ -304,10 +294,14 @@ init_font :: () {
 
 
 show_window :: (_visible := true) {
-  if _visible init_ui();
+  if _visible && !visible {
+    init_ui();
+    update_records();
+  }
 
   visible = _visible;
   if !visible lru_free(*TextureCache.texture_cache);
+
   ShowWindow(hwnd, xx ifx visible then SW_SHOW else SW_HIDE);
   if !visible && ui_inited then Simp.swap_buffers(hwnd); // ensure streamer mode doesn't render old information
   if visible then SetForegroundWindow(hwnd); // ensure window has focus
