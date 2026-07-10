@@ -468,8 +468,12 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
 
 
 
-
-
+// Ask Windows to evict this process's unused resident pages. Allocations stay
+// valid and are paged back in on demand when the window is opened again.
+trim_process_working_set :: () {
+  SetProcessWorkingSetSize(GetCurrentProcess(), 0xffff_ffff_ffff_ffff, 0xffff_ffff_ffff_ffff);
+}
+SetProcessWorkingSetSize :: (process: HANDLE, minimum: SIZE_T, maximum: SIZE_T) -> BOOL #foreign kernel32;
 
 
 add_to_startup :: ($app_name: string, app_path: string) -> bool {

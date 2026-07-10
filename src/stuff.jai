@@ -303,19 +303,14 @@ init_font :: () {
 }
 
 
-get_ms_since_last_interaction :: () -> float64 {
-  if !last_interation_time return 0;
-  return get_ms() - last_interation_time;
-}
-last_interation_time: float64;
-
 show_window :: (_visible := true) {
+  if _visible init_ui();
+
   visible = _visible;
-  last_interation_time = get_ms();
   if !visible lru_free(*TextureCache.texture_cache);
   ShowWindow(hwnd, xx ifx visible then SW_SHOW else SW_HIDE);
-  if !visible then Simp.swap_buffers(hwnd); // ensure streamer mode doesn't render old information
-  if visible then  SetForegroundWindow(hwnd); // ensure window has focus
+  if !visible && ui_inited then Simp.swap_buffers(hwnd); // ensure streamer mode doesn't render old information
+  if visible then SetForegroundWindow(hwnd); // ensure window has focus
   if visible then is_streamer_mode = xx config.streamer_mode;
 }
 

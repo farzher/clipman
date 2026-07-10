@@ -4,7 +4,8 @@
 // import functions
 using,only(
   Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, send_registered_hotkey,
-  save_bitmap_to_file, myregisterhotkey, add_to_startup, remove_from_startup, is_set_to_run_on_startup
+  save_bitmap_to_file, myregisterhotkey, add_to_startup, remove_from_startup, is_set_to_run_on_startup,
+  trim_process_working_set
 ) Functions :: #import,file "functions.jai";
 
 //
@@ -23,7 +24,6 @@ config: struct {
   transparency      : int    = 90;
   streamer_mode     : int    = 0; // for privacy. won't render clips unless you take an extra action. 0 to disable
   on_startup_open   : int    = 1;
-  enable_watcher    : int    = 0; // after 5min close process and open the watcher process instead to save ram
   large_text_clips  : int    = 10000; // Delete Large Text Clips will only delete clips at least this large
   hotkey            : string = "alt+`";
   db_name           : string = "clipman.db";
@@ -48,26 +48,11 @@ ONLY_RENDER_WHEN_CHANGED :: true;
 
 hwnd    : HWND;
 visible := false;
-quit    := false;
 
-cmd_arg_spawned_by_watcher := false;
-cmd_arg_copy               := false;
 main :: () {
-  // read cmd line arguments
-    cmd_arg_spawned_by_watcher = xx cmd_arg("spawned_by_watcher");
-    cmd_arg_copy = xx cmd_arg("copy");
-
   set_cwd_to_exe_location(); // ensures we read and write files next to the exe, whereever it is
 
   config_load(); // load the config first
-
-  // when clipman is run on startup, maybe i want it to run the watcher first instead
-  // but i don't want to deal with setting cmd args on startup, or changing the startup exe to the watcher
-  // so if config is set to use watcher, and we we're not spawned by watcher, instantly kill ourselves and spawn watcher
-    if config.enable_watcher && !cmd_arg_spawned_by_watcher {
-      spawn_embedded_watcher();
-      return;
-    }
 
   // create the main window
     hwnd = create_window(
@@ -85,35 +70,36 @@ main :: () {
   // by pressing it instead of typing its string name into config file
   myregisterhotkey(hwnd, 0, config.hotkey);
 
-  // maybe show the window
-    show_window(false); // ensure show_window is called at least once because it does some setup stuff
-    if config.on_startup_open then show_window(true);
-    else if cmd_arg_spawned_by_watcher && !cmd_arg_copy then show_window(true);
-
   // need this to receive clipboard copy events
   AddClipboardFormatListener(hwnd);
 
-  // init everything
-  init_everything();
-
-  // this has to happen after init everything
-  if cmd_arg_copy then on_copy();
+  // Initialize the clipboard/database state now, but leave OpenGL unloaded until
+  // the window is actually opened. The graphics driver accounts for nearly all
+  // of ClipMan's otherwise-idle working set.
+  init_data();
 
   // create tray icon
   trayicon_create(tooltip=#run interp("%{APP_NAME} %{VERSION}"));
   // notify windows to remove our tray icon because it's too stupid to do this on its own
   defer trayicon_free();
 
+  // maybe show the window. Keep this after background initialization so hiding
+  // also trims the pages touched during startup.
+  show_window(xx config.on_startup_open);
+
   // main game loop
-  while !quit {
+  while true {
 
     update();
 
-    if visible render(); else sleep_based_on_last_interaction_time();
-
-    maybe_quit_to_watcher();
-
-    tfree();
+    if visible {
+      render();
+      tfree();
+    } else {
+      tfree();
+      trim_process_working_set();
+      WaitMessage();
+    }
 
   }
 
@@ -141,11 +127,9 @@ is_config_parse_error : bool;
 
 order_by := "last_seen_at";
 
-init_everything :: () {
+init_data :: () {
 
   // init_crash_log();
-
-  Simp.set_render_target(hwnd);
 
   init_db();
 
@@ -155,33 +139,15 @@ init_everything :: () {
 
   update_records();
 
+}
+
+ui_inited := false;
+init_ui :: () {
+  if ui_inited return;
+  ui_inited = true;
+
+  Simp.set_render_target(hwnd);
   init_font();
-
-}
-
-embedded_watcher_exe_bytes :: #run embed_file("bin/clipman-watcher.exe");
-
-spawn_embedded_watcher :: () -> bool {
-  File :: #import "File";
-
-  watcher_path :: "clipman-watcher.exe";
-  File.write_entire_file(watcher_path, embedded_watcher_exe_bytes.data, embedded_watcher_exe_bytes.count);
-
-  p: Process.Process;
-  return Process.create_process(*p, watcher_path, kill_process_if_parent_exits = false);
-}
-
-maybe_quit_to_watcher :: () {
-  if !cmd_arg_spawned_by_watcher && !config.enable_watcher return;
-  if visible return;
-
-  ms_since_last_interation := get_ms_since_last_interaction();
-  if ms_since_last_interation > 1000*60*5/*5 min*/ {
-  // if ms_since_last_interation > 1000*60*0.05/*small min*/ {
-    UnregisterHotKey(hwnd, 0);
-    spawn_embedded_watcher();
-    quit = true;
-  }
 }
 
 // // redirect stderr to a crash.log file
@@ -944,13 +910,6 @@ ensure_selection_in_range :: () {
   else if scroll_offset >= total_copy_count  then {scroll_offset = total_copy_count-1; selected_index = 0;}
 }
 
-sleep_based_on_last_interaction_time :: () {
-  ms_since_last_interation := get_ms_since_last_interaction();
-  ms_to_sleep := mapnumber(xx ms_since_last_interation, 0,1000*60*5/*5 min*/, 1,200, exponent=1.5);
-  sleep_milliseconds(xx ms_to_sleep);
-}
-
-
 // sharex screenshot sends 2 copy events, so this is called twice...
 // also every time we paste a clip we copy it first, which would cause duplicates
 // so we need to deduplicate clips
@@ -1134,8 +1093,6 @@ COLORS :: #import,dir "modules/colors";
 Simp :: #import "Simp";
 
 using,only(ceil,abs) Math :: #import "Math";
-
-Process :: #import "Process";
 
 GetRect :: #import "GetRect";
 

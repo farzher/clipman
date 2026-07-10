@@ -13,8 +13,8 @@ https://github.com/farzher/clipman/releases/download/v1.0.0/clipman.exe
 # Features
 - database encryption
 - 0 dependencies, 1 exe, 2mb
-- < 1MB RAM usage while idle - (with enable_watcher: 1 in clipman.json)
-- streamer mode - everytime clipman's opened all information is censored until you click or hit tab
+- < 1MB RAM usage while idle
+- streamer mode - everytime clipman's opened all information is censored
 - images highgly compressed using webp to keep the .db file small
   - the original image is saved to the %temp% folder and will be used until it's gone
 - start typing to filter to clips containing that text
