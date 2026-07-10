@@ -3,6 +3,10 @@ Clipboard manager for Windows. Alternative to [Ditto](https://github.com/sabrogd
 
 Nowhere near as advanced as Ditto, but this does support db encryption https://github.com/sabrogden/Ditto/issues/171#issuecomment-934690415
 
+# Download
+
+https://github.com/farzher/clipman/releases/download/v1.0.0/clipman.exe
+
 # Screenshot
 ![](https://i.imgur.com/gLrmKk0.png)
 
@@ -18,9 +22,6 @@ Nowhere near as advanced as Ditto, but this does support db encryption https://g
 - hover over the right half of a clip to get a quick detailed view of it
   - text / files / images - expand to fill the window
   - text that is an imgur link or youtube link - renders as an image
-
-# Usage
-Download the repo then run `release/clipman.exe`
 
 # Build From Source
 0. have #the_compiler(beta 0.2.030, built on 2 July 2026)
