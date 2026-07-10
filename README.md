@@ -5,7 +5,7 @@ Nowhere near as advanced as Ditto, but this does support db encryption https://g
 
 # Download
 
-https://github.com/farzher/clipman/releases/download/v1.0.0/clipman.exe
+https://github.com/farzher/clipman/releases/download/v1.0.1/clipman.exe
 
 # Screenshot
 ![](https://i.imgur.com/gLrmKk0.png)
