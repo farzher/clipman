@@ -2,93 +2,128 @@
 #import "Compiler";
 File :: #import "File";
 
-STUB_FILEPATH :: "src/modules/compress_exe/packed_stub.jai";
-PAYLOAD_PATH  :: "release/clipman.payload.lzms";
+STUB_FILEPATH :: #run tprint("%/packed_stub.jai", #filepath);
+PAYLOAD_PATH  :: #run tprint("%/payload.lzms", #filepath);
 
-// Builds `main_filepath` as an unpacked payload, then builds the packed stub
-// using the original output executable name.
+// compile the normal exe first so we can compress it, then compile the stub
+// using the normal exe's name
 compress_exe :: (root_path: string, main_filepath: string, options: *Build_Options) {
-  main_filepath_full := path_from_root(root_path, main_filepath);
-  options.output_path = path_from_root(root_path, options.output_path);
+  build_options := options.*; // don't leave the caller's options pointing at temporary data
+  build_options.output_path = path_from_root(root_path, build_options.output_path);
 
-  absolute_import_path: [..] string;
-  for options.import_path array_add(*absolute_import_path, path_from_root(root_path, it));
-  options.import_path = absolute_import_path;
+  absolute_import_paths: [..]string;
+  for build_options.import_path array_add(*absolute_import_paths, path_from_root(root_path, it));
+  build_options.import_path = absolute_import_paths;
 
-  packed_exe_name := options.output_executable_name;
-  unpacked_exe_name := tprint("%1.unpacked", packed_exe_name);
+  packed_exe_name   := build_options.output_executable_name;
+  unpacked_exe_name := tprint("%.unpacked", packed_exe_name);
+  unpacked_exe_path := path_join(build_options.output_path, tprint("%.exe", unpacked_exe_name));
 
-  options.output_executable_name = unpacked_exe_name;
-  unpacked_workspace := compiler_create_workspace();
-  set_build_options(options.*, unpacked_workspace);
-  compile_in_workspace(unpacked_workspace, main_filepath_full);
+  cleanup(unpacked_exe_path); // cleanup junk from an interrupted build
 
-  unpacked_exe_path := tprint("%1%2.exe", options.output_path, options.output_executable_name);
+  build_options.output_executable_name = unpacked_exe_name;
+  if !compile_in_new_workspace(build_options, path_from_root(root_path, main_filepath)) {
+    cleanup(unpacked_exe_path);
+    assert(false, "Failed to compile unpacked executable");
+    return;
+  }
 
-  pack(unpacked_exe_path);
+  if !pack(unpacked_exe_path) {
+    cleanup(unpacked_exe_path);
+    assert(false, "Failed to compress executable");
+    return;
+  }
 
-  options.output_executable_name = packed_exe_name;
-  packed_workspace := compiler_create_workspace();
-  set_build_options(options.*, packed_workspace);
-  compile_in_workspace(packed_workspace, path_from_root(root_path, STUB_FILEPATH));
-
+  build_options.output_executable_name = packed_exe_name;
+  packed_ok := compile_in_new_workspace(build_options, STUB_FILEPATH);
   cleanup(unpacked_exe_path);
+  assert(packed_ok, "Failed to compile packed executable");
 }
 
 path_from_root :: (root_path: string, path: string) -> string {
   if path == "" return path;
   if path.count >= 2 && path[1] == #char":" return path;
   if path[0] == #char"/" || path[0] == #char"\\" return path;
-  return tprint("%1%2", root_path, path);
+  return path_join(root_path, path);
 }
 
-compile_in_workspace :: (workspace: Workspace, src_files: ..string) {
-  compiler_begin_intercept(workspace);
+path_join :: (directory: string, filename: string) -> string {
+  if directory == "" return filename;
+  last := directory[directory.count-1];
+  if last == #char"/" || last == #char"\\" return tprint("%%", directory, filename);
+  return tprint("%/%", directory, filename);
+}
 
+compile_in_new_workspace :: (options: Build_Options, src_files: ..string) -> bool {
+  workspace := compiler_create_workspace();
+  set_build_options(options, workspace);
+
+  compiler_begin_intercept(workspace);
   for src_files add_build_file(it, workspace);
 
+  succeeded := false;
   while true {
     message := compiler_wait_for_message();
-    if !message continue;
-    if message.workspace != workspace continue;
-    if message.kind == .COMPLETE break;
+    if !message || message.workspace != workspace continue;
+    if message.kind != .COMPLETE continue;
+
+    complete := cast(*Message_Complete) message;
+    succeeded = complete.error_code == .NONE;
+    break;
   }
 
   compiler_end_intercept(workspace);
+  compiler_destroy_workspace(workspace);
+  return succeeded;
 }
 
-pack :: (exe_path: string) {
-  exe_bytes := File.read_entire_file(exe_path);
-  assert(exe_bytes != "");
+pack :: (exe_path: string) -> bool {
+  exe_bytes, read_ok := File.read_entire_file(exe_path);
+  if !read_ok || exe_bytes.count == 0 {
+    log_error("Could not read executable '%'.\n", exe_path);
+    return false;
+  }
+  defer free(exe_bytes);
 
   compressor: *void;
   ok := CreateCompressor(COMPRESS_ALGORITHM_LZMS, null, *compressor);
-  assert(ok != 0, "LZMS compressor creation failed");
+  if ok == 0 {
+    log_error("LZMS compressor creation failed.\n");
+    return false;
+  }
   defer CloseCompressor(compressor);
 
   compressed_count: u64;
   Compress(compressor, exe_bytes.data, xx exe_bytes.count, null, 0, *compressed_count);
-  assert(compressed_count > 0, "LZMS compressed size probe failed");
+  if compressed_count == 0 {
+    log_error("LZMS compressed size probe failed.\n");
+    return false;
+  }
 
   compressed := alloc(xx compressed_count);
+  defer free(compressed);
   ok = Compress(compressor, exe_bytes.data, xx exe_bytes.count, compressed, compressed_count, *compressed_count);
-  assert(ok != 0, "LZMS compression failed");
+  if ok == 0 || compressed_count == 0 {
+    log_error("LZMS compression failed.\n");
+    return false;
+  }
 
-  payload_size := size_of(u64) + compressed_count;
-  payload := alloc(xx payload_size);
-  (cast(*u64) payload).* = xx exe_bytes.count;
-  memcpy(payload + size_of(u64), compressed, xx compressed_count);
-  File.write_entire_file(PAYLOAD_PATH, payload, xx payload_size);
+  if !File.write_entire_file(PAYLOAD_PATH, compressed, xx compressed_count) {
+    log_error("Could not write packed payload '%'.\n", PAYLOAD_PATH);
+    return false;
+  }
 
-  print("Packed payload: % -> % bytes (%.2x smaller)\n", exe_bytes.count, compressed_count, cast(float)exe_bytes.count / cast(float)compressed_count);
+  ratio := cast(float)exe_bytes.count / cast(float)compressed_count;
+  print("Packed payload: % -> % bytes (%x smaller)\n", exe_bytes.count, compressed_count, formatFloat(ratio, trailing_width=2, zero_removal=.NO));
+  return true;
 }
 
 COMPRESS_ALGORITHM_LZMS :: 5;
 
 cabinet :: #library,system "Cabinet";
-CreateCompressor :: (Algorithm: u32, AllocationRoutines: *void, CompressorHandle: **void) -> s32 #foreign cabinet;
-Compress         :: (CompressorHandle: *void, UncompressedData: *void, UncompressedDataSize: u64, CompressedBuffer: *void, CompressedBufferSize: u64, CompressedDataSize: *u64) -> s32 #foreign cabinet;
-CloseCompressor  :: (CompressorHandle: *void) -> s32 #foreign cabinet;
+CreateCompressor :: (algorithm: u32, allocation_routines: *void, compressor_handle: **void) -> s32 #foreign cabinet;
+Compress         :: (compressor_handle: *void, uncompressed_data: *void, uncompressed_data_size: u64, compressed_buffer: *void, compressed_buffer_size: u64, compressed_data_size: *u64) -> s32 #foreign cabinet;
+CloseCompressor  :: (compressor_handle: *void) -> s32 #foreign cabinet;
 
 cleanup :: (unpacked_exe_path: string) {
   File.file_delete(unpacked_exe_path);
