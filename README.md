@@ -32,4 +32,4 @@ https://github.com/farzher/clipman/releases/download/v1.0.1/clipman.exe
 - src/main.jai      - the main game loop
 - src/stuff.jai     - just a mess of stuff
 - src/functions.jai - relatively pure dependency free functions
-- src/modules/      - old/hacked versions of standard library modules + 3rd party modules + custom modules
+- src/modules/      - third-party and custom modules

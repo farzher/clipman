@@ -4,11 +4,35 @@
 // this file is a mess, idk
 
 
+Clipman_Event_Type :: enum u32 {
+  KEYBOARD    :: cast(u32) Event_Type.KEYBOARD;
+  MOUSE_WHEEL :: cast(u32) Event_Type.MOUSE_WHEEL;
+  QUIT        :: cast(u32) Event_Type.QUIT;
 
+  CLIP_COPY :: 0x8000_0000;
+  FOCUS_LOST;
+  HOTKEY;
+  MY_TRAY;
+}
 
+queue_clipman_event :: (type: Clipman_Event_Type, code: u32 = 0) {
+  event: Event;
+  event.type  = cast,no_check(Event_Type) type;
+  event.utf32 = code; // Payload for custom events; tray messages use this.
+  array_add(*events_this_frame, event);
+}
 
-
-
+clipman_window_proc :: (window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> s64 #c_call {
+  push_context {
+    if message == {
+      case WM_CLIPBOARDUPDATE;   queue_clipman_event(.CLIP_COPY); return 0;
+      case WM_HOTKEY;            queue_clipman_event(.HOTKEY);    return 0;
+      case WMAPP_NOTIFYCALLBACK; queue_clipman_event(.MY_TRAY, xx lparam); return 0;
+      case WM_KILLFOCUS;         queue_clipman_event(.FOCUS_LOST);
+    }
+    return MyWindowProc(window, message, wparam, lparam);
+  }
+}
 
 
 // Remote preview downloads live here only until the main thread uploads them
@@ -75,15 +99,9 @@ request_q: struct {
 TextureCache: struct {
   #import,file "modules/my_lru_cache.jai";
 
-  texture_cache: LRU(int, Simp.Texture, MAX_RECORDS, FREE_PROC=texture_free);
+  texture_cache: LRU(int, Simp.Texture, MAX_RECORDS, FREE_PROC=Simp.texture_destroy);
 
   MAX_RECORDS :: 100; // a guess at the maximum amount of records that could ever be displayed. if we display more than this bad things could happen
-
-  // simp's implementation "deinit" doesn't actually free the memory currently, lol.
-  texture_free :: (texture: *Simp.Texture) {
-    #import "GL";
-    glDeleteTextures(1, *texture.gl_handle);
-  }
 
   upload_completed_requests :: () -> bool {
     if !request_q.inited || !request_q.request_cache.count return false;

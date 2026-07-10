@@ -54,15 +54,21 @@ main :: () {
 
   config_load(); // load the config first
 
-  // create the main window
+  // create_window shows immediately. If starting hidden, briefly create a tiny dark window off-screen
+    start_hidden := config.on_startup_open == 0;
+    context.input_handler.window_proc = clipman_window_proc;
     hwnd = create_window(
       window_name          = #run interp("%{APP_NAME} %{VERSION}"),
-      width                = window_width,
-      height               = window_height,
-      background_color_rgb = COLORS.to_3f(COLORS.DARK),
-      style                = WS_POPUP,
-      style_ex             = WS_EX_LAYERED | WS_EX_TOOLWINDOW
+      width                = ifx start_hidden then 1 else window_width,
+      height               = ifx start_hidden then 1 else window_height,
+      window_x             = ifx start_hidden then -32000 else -1,
+      window_y             = ifx start_hidden then -32000 else -1,
+      background_color_rgb = COLORS.to_3f(COLORS.DARK)
     );
+    if start_hidden ShowWindow(hwnd, SW_HIDE);
+    SetWindowLongW(hwnd, GWL_STYLE, xx WS_POPUP);
+    SetWindowLongW(hwnd, GWL_EXSTYLE, WS_EX_LAYERED | WS_EX_TOOLWINDOW);
+    SetWindowPos(hwnd, null, 0, 0, xx window_width, xx window_height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     set_window_pos_to_mouse(hwnd);
 
   // register our global show hide hotkey
@@ -210,12 +216,11 @@ update :: () {
       GetRect.handle_event(*search_input, event.*);
     }
 
-    if event.type == .KEYBOARD // use .KEYUP and .KEYDOWN events insead of .KEYBOARD
-      event.type = ifx event.key_pressed then event.type.KEYDOWN else .KEYUP;
+    event_type := cast,no_check(Clipman_Event_Type) event.type;
+    if event_type == {
 
-    if event.type == {
 
-      case .KEYDOWN;
+      case .KEYBOARD; if !event.key_pressed continue; // KEYDOWN
 
         if event.key_code == {
 
@@ -268,8 +273,9 @@ update :: () {
 
       case .CLIP_COPY; on_copy();
 
+
       case .FOCUS_LOST;
-        if ignore_next_blur {ignore_next_blur=false; continue;}
+        if ignore_next_blur {ignore_next_blur = false; continue;}
         show_window(false);
         GetRect.clear_text(*search_input);
 
@@ -290,18 +296,15 @@ update :: () {
 
 
       case .MY_TRAY;
+        if event.utf32 == {
 
-        if event.mycode == {
+          case WM_LBUTTONUP; show_window(true);
 
-          case 514; // left click release
-            show_window(true);
-
-          case 517; // right click release
-
+          case WM_RBUTTONUP;
             run_on_startup := is_set_to_run_on_startup(APP_NAME);
             startup_label := ifx run_on_startup then "[✓] Run on Startup" else "Run on Startup";
-
             selection := popup_menu(.["Exit", startup_label, "Encrypt", "Delete Large Text Clips", "VACUUM DB", "Config / Settings", "Import from Ditto", "Open"]);
+
             if selection == {
 
               case "Run on Startup";
@@ -319,13 +322,9 @@ update :: () {
                 ShellExecuteA(null, "open", CONFIG_PATH, null, null, SW_SHOW);
 
               case "Import from Ditto";
-                if is_db_locked break; // db is currently locked
-
-                cditto_filepath := showinputbox("ditto.db filepath", "ditto.db filepath", ispassword=false);
-                if cditto_filepath == null then break;
-                ditto_filepath := copy_temporary_string(fromcstr(cditto_filepath));
-
-                import_from_ditto_db(ditto_filepath);
+                if is_db_locked break;
+                filepath := showinputbox("ditto.db filepath", "ditto.db filepath", ispassword=false);
+                if filepath then import_from_ditto_db(copy_temporary_string(fromcstr(filepath)));
 
               case "Delete Large Text Clips";
                 if config.large_text_clips {
@@ -354,7 +353,6 @@ update :: () {
                 is_db_locked = !success;
 
             }
-
         }
     }
   }
@@ -376,9 +374,6 @@ update :: () {
   if visible && (previous_scroll_offset != scroll_offset || previous_search_string != search_input.text)
     update_records();
 }
-
-
-
 
 
 render :: () {
@@ -1067,10 +1062,8 @@ using,only(ceil,abs) Math :: #import "Math";
 
 GetRect :: #import "GetRect";
 
-// #import,dir "modules/Input";
-#import "Input"; // we need to use this normal style of import so we import the same Input as getrect
-
-#import,dir "modules/Window_Creation";
+#import "Input";
+#import "Window_Creation";
 #import "Windows_Utf8";
 
 String        :: #import "String";
