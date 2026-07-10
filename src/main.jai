@@ -10,7 +10,7 @@ using,only(
 
 //
 APP_NAME      :: "ClipMan";
-VERSION       :: "v1.0.0";
+VERSION       :: "v1.0.1";
 CONFIG_PATH   :: "clipman.json";
 
 // default config
