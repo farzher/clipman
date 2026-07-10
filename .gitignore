@@ -1,6 +1,6 @@
 .build/
 *.db
-*.json
+*.ini
 *.pdb
 *.codex
 ignore/

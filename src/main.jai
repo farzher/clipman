@@ -11,10 +11,10 @@ using,only(
 //
 APP_NAME      :: "ClipMan";
 VERSION       :: "v1.0.1";
-CONFIG_PATH   :: "clipman.json";
+CONFIG_PATH   :: "clipman.ini";
 
 // default config
-// used to create the default clipman.json file
+// used to create the default clipman.ini file
 // once quickly overwitten by config_load, you can use this config variable to access user's settings
 config: struct {
   window_width      : int    = 1200;
@@ -1003,7 +1003,6 @@ import_from_ditto_db :: (ditto_filepath: string) {
 // depends on many globals
 config_load :: () {
   using,only(read_entire_file) #import "File";
-  json :: #import,dir "modules/json";
 
   // define these globals computed by the newly loaded config data
   defer {
@@ -1014,18 +1013,16 @@ config_load :: () {
 
   // config file doesn't exist. create it using the default config
   if !file_exists(CONFIG_PATH) {
-    json.json_write_file(CONFIG_PATH, config);
+    if !ini_write_file(CONFIG_PATH, config) is_config_parse_error = true;
     return;
   }
 
   // read/parse the config file into config
   file_data, read_success := read_entire_file(CONFIG_PATH);
   if !read_success {is_config_parse_error = true; return; }
+  defer free(file_data);
 
-  parse_success, parsed_config := json.json_parse_string(file_data, type_of(config));
-  if !parse_success {is_config_parse_error = true; return; }
-
-  config = parsed_config;
+  if !ini_parse_string(file_data, *config) is_config_parse_error = true;
 }
 
 

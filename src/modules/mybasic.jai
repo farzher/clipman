@@ -129,6 +129,82 @@ escape :: (str: string) -> string {
 
 
 
+ini_parse_string :: (content: string, destination: *$T) -> bool {
+  info := type_info(T);
+  if info.type != .STRUCT return false;
+  struct_info := cast(*Type_Info_Struct) info;
+
+  parsed := destination.*; // Keep defaults for keys omitted from the file.
+  lines := split(content, "\n",, temp);
+  for raw_line: lines {
+    line := trim(raw_line);
+    if !line continue;
+    if line[0] == #char "#" || line[0] == #char ";" continue;
+
+    equals_index := find_index_from_left(line, "=");
+    if equals_index < 0 return false;
+
+    key        := trim(slice(line, 0, equals_index));
+    value_text := trim(slice(line, equals_index + 1, line.count - equals_index - 1));
+    if !key return false;
+
+    member: *Type_Info_Struct_Member;
+    for *candidate: struct_info.members {
+      if candidate.flags & .CONSTANT continue;
+      if candidate.name == key { member = candidate; break; }
+    }
+    if !member continue;
+
+    slot := cast(*u8) *parsed + member.offset_in_bytes;
+    if member.type == type_info(int) {
+      value, success, remainder := string_to_int(value_text, T = int);
+      if !success || trim(remainder) return false;
+      (.*) cast(*int) slot = value;
+    } else if member.type == type_info(string) {
+      (.*) cast(*string) slot = copy_string(value_text);
+    } else {
+      return false;
+    }
+  }
+
+  destination.* = parsed;
+  return true;
+}
+
+ini_write_file :: (filename: string, value: $T) -> bool {
+  File :: #import "File";
+
+  info := type_info(T);
+  if info.type != .STRUCT return false;
+  struct_info := cast(*Type_Info_Struct) info;
+
+  builder: String_Builder;
+  defer free_buffers(*builder);
+
+  for *member: struct_info.members {
+    if member.flags & .CONSTANT continue;
+
+    append(*builder, member.name);
+    append(*builder, " = ");
+
+    slot := cast(*u8) *value + member.offset_in_bytes;
+    if member.type == type_info(int) {
+      print_to_builder(*builder, "%", (.*) cast(*int) slot);
+    } else if member.type == type_info(string) {
+      append(*builder, (.*) cast(*string) slot);
+    } else {
+      return false;
+    }
+    append(*builder, "\n");
+  }
+
+  return File.write_entire_file(filename, *builder);
+}
+
+
+
+
+
 
 // NO_CODE :: #code,null;
 // logx :: ($c1:Code=NO_CODE, $c2:Code=NO_CODE, $c3:Code=NO_CODE, $c4:Code=NO_CODE, loc := #caller_location) -> c1.type, c2.type, c3.type, c4.type #expand {
