@@ -4,7 +4,7 @@
 // import functions
 using,only(
   Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, send_registered_hotkey,
-  save_bitmap_to_file, myregisterhotkey, add_to_startup, remove_from_startup, is_set_to_run_on_startup,
+  save_bitmap_to_file, set_file_time_to_utc, myregisterhotkey, add_to_startup, remove_from_startup, is_set_to_run_on_startup,
   trim_process_working_set
 ) Functions :: #import,file "functions.jai";
 
@@ -54,15 +54,15 @@ main :: () {
 
   config_load(); // load the config first
 
-  // create_window shows immediately. If starting hidden, briefly create a tiny dark window off-screen
+  // create_window can't be hidden on creation. so, create a tiny dark window off-screen
     start_hidden := config.on_startup_open == 0;
     context.input_handler.window_proc = clipman_window_proc;
     hwnd = create_window(
       window_name          = #run interp("%{APP_NAME} %{VERSION}"),
-      width                = ifx start_hidden then 1 else window_width,
-      height               = ifx start_hidden then 1 else window_height,
-      window_x             = ifx start_hidden then -32000 else -1,
-      window_y             = ifx start_hidden then -32000 else -1,
+      width                = 1,
+      height               = 1,
+      window_x             = -32000,
+      window_y             = -32000,
       background_color_rgb = COLORS.to_3f(COLORS.DARK)
     );
     if start_hidden ShowWindow(hwnd, SW_HIDE);
@@ -303,7 +303,7 @@ update :: () {
           case WM_RBUTTONUP;
             run_on_startup := is_set_to_run_on_startup(APP_NAME);
             startup_label := ifx run_on_startup then "[✓] Run on Startup" else "Run on Startup";
-            selection := popup_menu(.["Exit", startup_label, "Encrypt", "Delete Large Text Clips", "VACUUM DB", "Config / Settings", "Import from Ditto", "Open"]);
+            selection := popup_menu(.["Exit", startup_label, "Encrypt", "Save All Images", "Delete Images", "Delete Large Text Clips", "VACUUM DB", "Config / Settings", "Import from Ditto", "Open"]);
 
             if selection == {
 
@@ -326,7 +326,38 @@ update :: () {
                 filepath := showinputbox("ditto.db filepath", "ditto.db filepath", ispassword=false);
                 if filepath then import_from_ditto_db(copy_temporary_string(fromcstr(filepath)));
 
+              case "Save All Images";
+                if MessageBoxW(null, utf8_to_wide("Save all images to Downloads?"), utf8_to_wide("Save All Images"), MB_OKCANCEL | MB_TOPMOST) != IDOK break;
+                System :: #import "System";
+                username := System.get_username();
+                folder := tprint("C:/Users/%/Downloads/clipman_%", username, getutcms());
+                make_directory_if_it_does_not_exist(folder);
+                rows := db.select(to_c_string(interp("select id, preview, type, first_seen_at from copy where type=? or type=?"),, temp), cast(int)COPY_TYPE.BITMAP, cast(int)COPY_TYPE.WEBP);
+                saved := 0;
+                for row: rows {
+                  auto_release_temp(); // release this image's temp allocations before the next one
+                  record: DbRecord;
+                  record.id            = db.get_int(row, 0);
+                  record.preview       = db.get_str(row, 1); // heap-allocated blob
+                  defer free(record.preview);
+                  record.type          = xx db.get_int(row, 2);
+                  record.first_seen_at = db.get_int(row, 3);
+                  bitmap := record_to_windows_bitmap(record); // temp-allocated; freed by the mark reset
+                  filepath := tprint("%/clipman_%.png", folder, record.id);
+                  if save_bitmap_to_file(bitmap, filepath) {
+                    set_file_time_to_utc(filepath, record.first_seen_at); // stamp with original copy time
+                    saved += 1;
+                  }
+                }
+                MessageBoxW(null, utf8_to_wide(tprint("Saved % images to %", saved, folder)), utf8_to_wide("Save All Images"), MB_OK | MB_TOPMOST);
+
+              case "Delete Images";
+                if MessageBoxW(null, utf8_to_wide("Delete all images?"), utf8_to_wide("Delete Images"), MB_OKCANCEL | MB_TOPMOST) != IDOK break;
+                db.query("DELETE FROM copy WHERE type=? or type=?", cast(int)COPY_TYPE.BITMAP, cast(int)COPY_TYPE.WEBP);
+                db.query("VACUUM"); // this is slow
+
               case "Delete Large Text Clips";
+                if MessageBoxW(null, utf8_to_wide("Delete all large text clips?"), utf8_to_wide("Delete Large Text Clips"), MB_OKCANCEL | MB_TOPMOST) != IDOK break;
                 if config.large_text_clips {
                   db.query(#string SQL
                     DELETE FROM copy WHERE (type=? or type=?) AND bytecount > ?
@@ -742,6 +773,7 @@ do_rightclick :: () #expand {
           // ^ fixed by using getutcms
           filepath := tprint("C:/Users/%/Downloads/clipman_%.png", System.get_username(), getutcms());
           success := save_bitmap_to_file(record_to_windows_bitmap(record), filepath);
+          if success then set_file_time_to_utc(filepath, record.first_seen_at); // stamp with original copy time
           if !success  mylog("failed to save image");
 
         case; mylog("can only save bitmaps"); return;

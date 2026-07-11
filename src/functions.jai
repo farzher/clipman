@@ -463,6 +463,23 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
   }
 }
 
+// set a file's created + modified time to a UTC unix timestamp (seconds)
+// used to stamp saved-out images with their original copy time
+set_file_time_to_utc :: (filepath: string, utc_seconds: int) {
+  WINDOWS_TICK      :: 10_000_000;
+  SEC_TO_UNIX_EPOCH :: 11644473600;
+  ticks : u64 = (cast(u64)utc_seconds + SEC_TO_UNIX_EPOCH) * WINDOWS_TICK;
+
+  ft: FILETIME;
+  ft.dwLowDateTime  = cast(u32)(ticks & 0xFFFF_FFFF);
+  ft.dwHighDateTime = cast(u32)(ticks >> 32);
+
+  handle := CreateFileA(temp_c_string(filepath), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, null, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, null);
+  if handle == INVALID_HANDLE_VALUE then return;
+  SetFileTime(handle, *ft, null, *ft); // creation, (access left alone), last-write
+  CloseHandle(handle);
+}
+
 
 
 

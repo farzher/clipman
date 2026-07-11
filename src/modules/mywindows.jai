@@ -17,6 +17,7 @@ WM_CLIPBOARDUPDATE              :: 0x031D;
 
 SetForegroundWindow :: (hwnd: HWND) -> BOOL #foreign user32;
 SetBkMode :: (hdc: HDC, mode: s32) -> s32 #foreign gdi;
+SetFileTime :: (file: HANDLE, lpCreationTime: *FILETIME, lpLastAccessTime: *FILETIME, lpLastWriteTime: *FILETIME) -> BOOL #foreign kernel32;
 
 TRANSPARENT :: 1;
 OPAQUE      :: 2;
