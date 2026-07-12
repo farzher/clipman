@@ -17,17 +17,17 @@ CONFIG_PATH   :: "clipman.ini";
 // used to create the default clipman.ini file
 // once quickly overwitten by config_load, you can use this config variable to access user's settings
 config: struct {
-  window_width      : int    = 1200;
-  window_height     : int    = 840;
-  record_height     : int    = 70;
-  record_lines      : int    = 3;
-  transparency      : int    = 90;
-  streamer_mode     : int    = 0; // for privacy. won't render clips unless you take an extra action. 0 to disable
-  on_startup_open   : int    = 1;
-  large_text_clips  : int    = 10000; // Delete Large Text Clips will only delete clips at least this large
-  hotkey            : string = "alt+`";
-  db_name           : string = "clipman.db";
-  remember_password : string = "";
+  window_width      := 1200;
+  window_height     := 840;
+  record_height     := 70;
+  record_lines      := 3;
+  transparency      := 90;
+  streamer_mode     := 0; // for privacy. won't render clips unless you take an extra action. 0 to disable
+  on_startup_open   := 1;
+  large_text_clips  := 10000; // Delete Large Text Clips will only delete clips at least this large
+  hotkey            := "alt+`";
+  db_name           := "clipman.db";
+  remember_password := "";
 }
 
 // these values are calculated based on the config data
@@ -55,7 +55,6 @@ main :: () {
   config_load(); // load the config first
 
   // create_window can't be hidden on creation. so, create a tiny dark window off-screen
-    start_hidden := config.on_startup_open == 0;
     context.input_handler.window_proc = clipman_window_proc;
     hwnd = create_window(
       window_name          = #run interp("%{APP_NAME} %{VERSION}"),
@@ -65,7 +64,7 @@ main :: () {
       window_y             = -32000,
       background_color_rgb = COLORS.to_3f(COLORS.DARK)
     );
-    if start_hidden ShowWindow(hwnd, SW_HIDE);
+    if !config.on_startup_open then ShowWindow(hwnd, SW_HIDE);
     SetWindowLongW(hwnd, GWL_STYLE, xx WS_POPUP);
     SetWindowLongW(hwnd, GWL_EXSTYLE, WS_EX_LAYERED | WS_EX_TOOLWINDOW);
     SetWindowPos(hwnd, null, 0, 0, xx window_width, xx window_height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
