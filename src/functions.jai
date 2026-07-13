@@ -1,13 +1,10 @@
 
 
-
-
 // self contained helper functions without global dependencies
 
 
 
 
-// #load "modules/mybasic.jai";
 #import "Basic";
 #import,file "modules/mybasic.jai";
 #import,file "modules/mywindows.jai";
@@ -37,14 +34,11 @@ Mouse: struct {
   }
 }
 
-
-
-
 // Monitor.size(hwnd) memoizes the size the first time it's called.
 // this probably has issues with multiple monitors
 Monitor: struct {
 
-  _size: struct {x, y, w, h :s32;};
+  _size: struct {w, h: s32;};
   size :: (hwnd: HWND) -> type_of(_size) { ensure_init(hwnd); return Monitor._size; }
 
   init :: (hwnd: HWND) {
@@ -53,10 +47,8 @@ Monitor: struct {
     success := GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), *info);
     if !success  die("failed to get monitor size");
 
-    Monitor._size.x = info.rcMonitor.left;
-    Monitor._size.y = info.rcMonitor.top;
-    Monitor._size.w = info.rcMonitor.right - Monitor._size.x;
-    Monitor._size.h = info.rcMonitor.bottom - Monitor._size.y;
+    Monitor._size.w = info.rcMonitor.right - info.rcMonitor.left;
+    Monitor._size.h = info.rcMonitor.bottom - info.rcMonitor.top;
   }
 
   ensure_init :: (hwnd: HWND) {
@@ -64,10 +56,6 @@ Monitor: struct {
     Monitor.init(hwnd);
   }
 }
-
-
-
-
 
 set_window_pos_to_mouse :: (hwnd: HWND) {
 
@@ -86,60 +74,24 @@ set_window_pos_to_mouse :: (hwnd: HWND) {
   too_far_down_amount := cast(s32)( y + window_height - Monitor.size(hwnd).h );
   if too_far_down_amount > 0 then y -= too_far_down_amount;
 
-  SetWindowPos(hwnd, HWND_TOPMOST, x, y, xx window_width, xx window_height, /*SWP_NOZORDER | SWP_NOACTIVATE | */SWP_FRAMECHANGED);
-  // SetWindowPos(hwnd, HWND_TOPMOST, mouse.x, mouse.y, window_width, window_height, SWP_FRAMECHANGED);
+  SetWindowPos(hwnd, HWND_TOPMOST, x, y, xx window_width, xx window_height, SWP_FRAMECHANGED);
 }
 
 send_paste :: () {
-  // Create a generic keyboard event structure
-  ip: INPUT;
-  ip.type = .INPUT_KEYBOARD;
+  inputs: [4]INPUT;
+  for *input: inputs input.type = .INPUT_KEYBOARD;
 
-  // Press the "Ctrl" key
-  ip.ki.wVk = VK_CONTROL;
-  ip.ki.dwFlags = 0; // 0 for key press
-  SendInput(1, *ip, size_of(INPUT));
+  inputs[0].ki.wVk = VK_CONTROL;
 
-  // Press the "V" key
-  ip.ki.wVk = #char "V";
-  ip.ki.dwFlags = 0; // 0 for key press
-  SendInput(1, *ip, size_of(INPUT));
+  inputs[1].ki.wVk = #char "V";
 
-  // Release the "V" key
-  ip.ki.wVk = #char "V";
-  ip.ki.dwFlags = KEYEVENTF_KEYUP;
-  SendInput(1, *ip, size_of(INPUT));
+  inputs[2].ki.wVk = #char "V";
+  inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
 
-  // Release the "Ctrl" key
-  ip.ki.wVk = VK_CONTROL;
-  ip.ki.dwFlags = KEYEVENTF_KEYUP;
-  SendInput(1, *ip, size_of(INPUT));
-}
+  inputs[3].ki.wVk = VK_CONTROL;
+  inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
 
-send_registered_hotkey :: () {
-  // Create a generic keyboard event structure
-  ip: INPUT;
-  ip.type = .INPUT_KEYBOARD;
-
-  // Press the "Alt" key
-  ip.ki.wVk = VK_MENU;
-  ip.ki.dwFlags = 0; // 0 for key press
-  SendInput(1, *ip, size_of(INPUT));
-
-  // Press the "~" key
-  ip.ki.wVk = VK_OEM_3;
-  ip.ki.dwFlags = 0; // 0 for key press
-  SendInput(1, *ip, size_of(INPUT));
-
-  // Release the "~" key
-  ip.ki.wVk = VK_OEM_3;
-  ip.ki.dwFlags = KEYEVENTF_KEYUP;
-  SendInput(1, *ip, size_of(INPUT));
-
-  // Release the "Alt" key
-  ip.ki.wVk = VK_MENU;
-  ip.ki.dwFlags = KEYEVENTF_KEYUP;
-  SendInput(1, *ip, size_of(INPUT));
+  SendInput(inputs.count, inputs.data, size_of(INPUT));
 }
 
 utc_to_time_ago :: (oldutc: int) -> string {
@@ -149,7 +101,6 @@ utc_to_time_ago :: (oldutc: int) -> string {
 
   builder: String_Builder;
 
-  // perf: could do some compile time stuff here?
   for (struct {label: string; seconds: int;}).[
     .{"years",   60*60*24*7*52},
     .{"weeks",   60*60*24*7},
@@ -410,7 +361,6 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
   Simp   :: #import "Simp";
 
   bitmap: Simp.Bitmap;
-  // Simp.bitmap_load_from_memory(*bitmap, xx bitmapinfobytes);
   bitmap_header: *BITMAPINFOHEADER = xx bitmapinfobytes.data;
   bitmap.width = bitmap_header.biWidth;
   bitmap.height = bitmap_header.biHeight;
@@ -421,17 +371,13 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
   bitmap.data.data = bitmapinfobytes.data + size_of(BITMAPINFOHEADER);
   if bitmap_header.biCompression == BI_BITFIELDS then bitmap.data.data += 3 * 4/*bytes*/;
 
-  // doesn't support bgr
-  // Simp.bitmap_save(*bitmap, filepath);
-
   stride := bitmap.stride;
   data   := bitmap.data.data;
 
-  components : s32 = 4;
-  if bitmap.format == .RGB8 components = 3;
+  components: s32 = xx ifx bitmap.format == .RGB8 then 3 else 4;
 
+  // stb_image_write expects RGBA, while CF_DIB stores BGRA.
   // change format from .BGRA8 to .RGBA8
-  // wtf??? this is so weird.
   row_ptr := bitmap.data.data;
   for y: 0..bitmap.height-1 {
     pixel_ptr := row_ptr;
@@ -447,7 +393,7 @@ save_bitmap_to_file :: (bitmapinfobytes: string, filepath: string) -> bool {
   name      := temp_c_string(filepath);
   extension := String.path_extension(filepath);
 
-  stbi.stbi_flip_vertically_on_write(1); // image was being saved upside down. again wtf????
+  stbi.stbi_flip_vertically_on_write(1); // CF_DIB rows are bottom-up.
   if extension == {
     case "png";
       return stbi.stbi_write_png(name, bitmap.width, bitmap.height, components, data, stride) != 0;
@@ -480,11 +426,6 @@ set_file_time_to_utc :: (filepath: string, utc_seconds: int) {
   CloseHandle(handle);
 }
 
-
-
-
-
-
 // Ask Windows to evict this process's unused resident pages. Allocations stay
 // valid and are paged back in on demand when the window is opened again.
 trim_process_working_set :: () {
@@ -492,25 +433,24 @@ trim_process_working_set :: () {
 }
 SetProcessWorkingSetSize :: (process: HANDLE, minimum: SIZE_T, maximum: SIZE_T) -> BOOL #foreign kernel32;
 
+open_startup_key :: (access: REGSAM) -> HKEY {
+  RUN_KEY :: "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+  key: HKEY;
+  if RegOpenKeyExA(HKEY_CURRENT_USER, RUN_KEY, 0, access, *key) != ERROR_SUCCESS {
+    log_error("Error opening registry key\n");
+    return null;
+  }
+  return key;
+}
 
 add_to_startup :: ($app_name: string, app_path: string) -> bool {
-  hKey: HKEY;
-  result: LONG;
+  key := open_startup_key(KEY_ALL_ACCESS);
+  if !key return false;
+  defer RegCloseKey(key);
 
-  // Open the run key
-  run_key :: "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
-  result = RegOpenKeyExA(HKEY_CURRENT_USER, run_key, 0, KEY_ALL_ACCESS, *hKey);
-  if result != ERROR_SUCCESS {
-    log_error("Error opening registry key\n");
-    return false;
-  }
-  defer RegCloseKey(hKey);
-
-  // Set the value
   app_path_with_backslash := replace(app_path, "/", "\\");
   app_path_with_backslash = tprint("\"%\"", app_path_with_backslash);
-  result = RegSetValueExA(hKey, app_name, 0, REG_SZ, cast(LPBYTE) to_c_string(app_path_with_backslash,, allocator=temp), cast(DWORD)(app_path_with_backslash.count));
-  if result != ERROR_SUCCESS {
+  if RegSetValueExA(key, app_name, 0, REG_SZ, cast(*u8) to_c_string(app_path_with_backslash,, allocator=temp), cast(DWORD)(app_path_with_backslash.count)) != ERROR_SUCCESS {
     log_error("Error setting registry value\n");
     return false;
   }
@@ -521,21 +461,11 @@ add_to_startup :: ($app_name: string, app_path: string) -> bool {
 
 
 remove_from_startup :: ($app_name: string) -> bool {
-  hKey: HKEY;
-  result: LONG;
+  key := open_startup_key(KEY_ALL_ACCESS);
+  if !key return false;
+  defer RegCloseKey(key);
 
-  // Open the run key
-  run_key :: "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
-  result = RegOpenKeyExA(HKEY_CURRENT_USER, run_key, 0, KEY_ALL_ACCESS, *hKey);
-  if result != ERROR_SUCCESS {
-    log_error("Error opening registry key\n");
-    return false;
-  }
-  defer RegCloseKey(hKey);
-
-  // Delete the value
-  result = RegDeleteValueA(hKey, app_name);
-  if result != ERROR_SUCCESS {
+  if RegDeleteValueA(key, app_name) != ERROR_SUCCESS {
     log_error("Error deleting registry value\n");
     return false;
   }
@@ -544,24 +474,15 @@ remove_from_startup :: ($app_name: string) -> bool {
   return true;
 }
 
-
-
 is_set_to_run_on_startup :: ($app_name: string) -> bool {
-  hKey: HKEY;
-  result: LONG;
+  key := open_startup_key(KEY_READ);
+  if !key return false;
+  defer RegCloseKey(key);
+
   buffer: [MAX_PATH]u8;
   buffer_size: DWORD = MAX_PATH;
   value_type: DWORD;
-
-  run_key :: "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
-  result = RegOpenKeyExA(HKEY_CURRENT_USER, run_key, 0, KEY_READ, *hKey);
-  if result != ERROR_SUCCESS {
-    log_error("Error opening registry key\n");
-    return false;
-  }
-  defer RegCloseKey(hKey);
-
-  result = RegQueryValueExA(hKey, app_name, null, *value_type, cast(LPBYTE)buffer.data, *buffer_size);
+  result := RegQueryValueExA(key, app_name, null, *value_type, cast(*u8)buffer.data, *buffer_size);
   if result == ERROR_SUCCESS && value_type == REG_SZ {
     print("Application is set to run on startup\n");
     print("Startup command: %\n", to_string(buffer.data, buffer_size));

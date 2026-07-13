@@ -1,9 +1,3 @@
-/* -farzher September 13, 2021
-  some extra windows bindings that i needed
-*/
-
-
-
 using #import "Windows";
 
 MOD_ALT      :: 0x0001;
@@ -16,38 +10,11 @@ WM_HOTKEY                       :: 0x0312;
 WM_CLIPBOARDUPDATE              :: 0x031D;
 
 SetForegroundWindow :: (hwnd: HWND) -> BOOL #foreign user32;
-SetBkMode :: (hdc: HDC, mode: s32) -> s32 #foreign gdi;
 SetFileTime :: (file: HANDLE, lpCreationTime: *FILETIME, lpLastAccessTime: *FILETIME, lpLastWriteTime: *FILETIME) -> BOOL #foreign kernel32;
-
-TRANSPARENT :: 1;
-OPAQUE      :: 2;
 
 
 SetLayeredWindowAttributes :: (hwnd: HWND, crkey: COLORREF, balpha: u8, dwflags: DWORD) -> BOOL #foreign user32;
 LWA_ALPHA    :: 0x02;
-LWA_COLORKEY :: 0x01;
-
-
-DWM_BB_ENABLE :: 0x00000001;
-DWM_BB_BLURREGION :: 0x00000002;
-HRGN :: HANDLE;
-DWM_BLURBEHIND :: struct {
-  dwFlags: DWORD ;
-  fEnable: BOOL  ;
-  hRgnBlur: HRGN  ;
-  fTransitionOnMaximized: BOOL  ;
-};
-DwmEnableBlurBehindWindow :: (hwnd: HWND, pbb: *DWM_BLURBEHIND) -> HRESULT #foreign Dwmapi;
-
-MARGINS :: struct {
-  cxLeftWidth: s32;
-  cxRightWidth: s32;
-  cyTopHeight: s32;
-  cyBottomHeight: s32;
-}
-DwmExtendFrameIntoClientArea :: (hwnd: HWND, pMarInset: *MARGINS) -> HRESULT #foreign Dwmapi;
-
-
 
 TPM_BOTTOMALIGN :: 0x0020;
 TPM_LEFTALIGN :: 0x0000;
@@ -59,11 +26,7 @@ InsertMenuW :: (hmenu: HMENU, uposition: u32, uflags: u32, uidnewitem: u64, lpne
 GetMessageW :: (lpMsg: *MSG, hwnd: HWND, wMsgFilterMin: u32, wMsgFilterMax: u32) -> BOOL #foreign user32;
 WaitMessage :: () -> BOOL #foreign user32;
 
-// GetQueuedCompletionStatus :: (CompletionPort: HANDLE, lpNumberOfBytesTransferred: *DWORD, lpCompletionKey: *u64, lpOverlapped: *LPOVERLAPPED, dwMilliseconds: DWORD) -> BOOL
-LPOVERLAPPED :: struct {}
-
-KEYEVENTF_EXTENDEDKEY :: 0x0001;
-KEYEVENTF_KEYUP       :: 0x0002;
+KEYEVENTF_KEYUP :: 0x0002;
 
 MF_BYPOSITION :: 0x00000400;
 MF_STRING :: 0x00000000;
@@ -105,36 +68,11 @@ HARDWAREINPUT :: struct {
 }
 
 
-PostMessageW :: (hwnd: HWND, msg: u32, wparam:WPARAM, lparam: LPARAM) -> BOOL #foreign user32;
-
-
-UnregisterHotKey :: (hwnd: HWND, id: s32) -> BOOL #foreign user32;
 RegisterHotKey :: (hwnd: HWND, id: s32, fsModifiers: u32, vk: u32) -> BOOL #foreign user32;
 SendInput :: (cInputs: u32, pInputs: *INPUT, cbSize: s32) -> u32 #foreign user32;
 SetFocus :: (hwnd: HWND) -> HWND #foreign user32;
 
-NtSetTimerResolution :: (DesiredResolution: s32, SetResolution: bool = true, CurrentResolution: *s32 = null) -> s32 #foreign ntdll;
-
 AddClipboardFormatListener :: (hwnd: HWND) -> HANDLE #foreign user32;
-SetClipboardViewer :: (hwnd: HWND) -> HANDLE #foreign user32;
-
-SetPriorityClass :: (hProcess: HANDLE, dwPriorityClass: DWORD) -> BOOL #foreign kernel32;
-// HIGH_PRIORITY_CLASS :: 0x00000080;
-
-
-// RGBQUAD :: struct {
-//     rgbBlue: u8;
-//     rgbGreen: u8;
-//     rgbRed: u8;
-//     rgbReserved: u8;
-// }
-
-// BITMAPINFO :: struct {
-//     bmiHeader: BITMAPINFOHEADER;
-//     bmiColors: [1]RGBQUAD;
-// }
-
-// GetObjectW :: (h: HANDLE, c: s32, pv: *void) -> s32 #foreign gdi;
 
 DROPFILES :: struct {
     pFiles: DWORD;
@@ -143,15 +81,10 @@ DROPFILES :: struct {
     fWide: BOOL;
 }
 
-EnumClipboardFormats :: (uFormat: u32) -> u32 #foreign user32;
 IsClipboardFormatAvailable :: (uFormat: u32) -> BOOL #foreign user32;
 
 COLORREF :: DWORD;
-GetPixel :: (hdc: HDC, x: s32, y: s32) -> COLORREF #foreign gdi;
-
-// HDROP :: HANDLE;
 DragQueryFileA :: (hDrop: HDROP, iFire: u32, lpszFile: LPSTR, cch: u32) -> u32 #foreign shell32;
-// DragQueryFileW :: (hDrop: HDROP, iFire: u32, lpszFile: LPSTR, cch: u32) -> u32 #foreign shell32;
 
 WM_APP :: 0x8000;
 
@@ -177,20 +110,10 @@ NOTIFYICONDATA :: struct {
   hBalloonIcon: HICON;
 }
 
-InsertMenuA :: (hMenu: HMENU, uPosition: u32, uFlags: u32, uIDNewItem: *u32, lpNewItem: LPCSTR = "") -> BOOL #foreign user32;
-
-SetWindowTheme :: (hwnd: HWND, pszSubAppName: LPCWSTR, pszSubIdList: LPCWSTR) #foreign UxTheme;
-
-// DialogBoxParamW :: (hInstance: HINSTANCE, lpTemplate: LPCWSTR, hWndParent: HWND, lpDialogFunc: *void, dwInitParam: LPARAM) -> s32 #foreign user32;
-
-NIF_MESSAGE ::  0x01;
-NIF_ICON    ::  0x02;
-NIF_TIP     ::  0x04;
-NIF_STATE   ::  0x08;
-NIF_INFO    ::  0x10;
-NIF_GUID    ::  0x20;
-NIF_REALTIME::  0x40;
-NIF_SHOWTIP ::  0x80;
+NIF_MESSAGE :: 0x01;
+NIF_ICON    :: 0x02;
+NIF_TIP     :: 0x04;
+NIF_SHOWTIP :: 0x80;
 
 NIM_ADD :: 0x00;
 NIM_DELETE :: 0x02;
@@ -202,18 +125,6 @@ DwmFlush :: () -> HRESULT #foreign Dwmapi;
 GlobalSize :: (hMem: HGLOBAL) -> SIZE_T #foreign kernel32;
 
 ShellExecuteA :: (hwnd: HWND, lpOperation: *u8, lpFile: *u8, lpParmeters: *u8, lpDirectory: *u8, nShowCmd: int) -> s32 #foreign shell32;
-ShellExecuteW :: (hwnd: HWND, lpOperation: *u8, lpFile: *u8, lpParmeters: *u8, lpDirectory: *u8, nShowCmd: int) -> s32 #foreign shell32;
-
-LPVOID :: *void;
-CreateDIBitmap :: (hdc: HDC, pbmih: *BITMAPINFOHEADER, flInit: DWORD, pjBits: *void, pbmi: *BITMAPINFO, iUsage: u32) -> HBITMAP #foreign gdi;
-GetDIBits :: (hdc: HDC, hbm: HBITMAP, start: u32, cLines: u32, lpvBits: LPVOID, BITMAPINFO_ptr: *void, usage: u32) -> s32 #foreign gdi;
-
-_dup :: (fd: s32) -> s32 #foreign Crt;
-_dup2 :: (oldfd: s32, newfd: s32) -> s32 #foreign Crt;
-FILE :: *void;
-fopen_s :: (file: FILE, filename: *u8, mode: *u8) -> s32 #foreign Crt;
-_fileno :: (file: FILE) -> s32 #foreign Crt;
-fseek  :: (stream: FILE, offset: s64, whence: s32) -> s32 #foreign Crt;
 
 VkKeyScanA :: (ch: u8) -> u16 #foreign user32;
 
@@ -223,51 +134,24 @@ SendMessageW :: (hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> LRESUL
 EnableWindow :: (hWnd: HWND, bEnable: BOOL) -> BOOL #foreign user32;
 IsWindow :: (hWnd: HWND) -> BOOL #foreign user32;
 
-
-
-
-// registry
-// Importing necessary Windows types
-// HKEY :: *void;
-PHKEY :: *HKEY;
+// Registry
 REGSAM :: u32;
-LONG :: s32;
-// DWORD :: u32;
-LPBYTE :: *u8;
 
-// Constants
 HKEY_CURRENT_USER : HKEY : xx 0x80000001;
 KEY_ALL_ACCESS : REGSAM : 0xF003F;
 KEY_READ : REGSAM : 0x20019;
-ERROR_SUCCESS : LONG : 0;
-// REG_SZ : DWORD : 1;
+ERROR_SUCCESS :: 0;
 
-// Function bindings
-RegOpenKeyExA      :: (hKey: HKEY, lpSubKey: *u8, ulOptions: DWORD, samDesired: REGSAM, phkResult: PHKEY) -> LONG #foreign Advapi32;
-RegSetValueExA     :: (hKey: HKEY, lpValueName: *u8, Reserved: DWORD, dwType: DWORD, lpData: LPBYTE, cbData: DWORD) -> LONG #foreign Advapi32;
-RegDeleteValueA    :: (hKey: HKEY, lpValueName: *u8) -> LONG #foreign Advapi32;
-RegQueryValueExA   :: (hKey: HKEY, lpValueName: *u8, lpReserved: *DWORD, lpType: *DWORD, lpData: LPBYTE, lpcbData: *DWORD) -> LONG #foreign Advapi32;
-RegCloseKey        :: (hKey: HKEY) -> LONG #foreign Advapi32;
-
-
-
-
-
-
-
+RegOpenKeyExA    :: (hKey: HKEY, lpSubKey: *u8, ulOptions: DWORD, samDesired: REGSAM, phkResult: *HKEY) -> s32 #foreign Advapi32;
+RegSetValueExA   :: (hKey: HKEY, lpValueName: *u8, reserved: DWORD, dwType: DWORD, lpData: *u8, cbData: DWORD) -> s32 #foreign Advapi32;
+RegDeleteValueA  :: (hKey: HKEY, lpValueName: *u8) -> s32 #foreign Advapi32;
+RegQueryValueExA :: (hKey: HKEY, lpValueName: *u8, lpReserved: *DWORD, lpType: *DWORD, lpData: *u8, lpcbData: *DWORD) -> s32 #foreign Advapi32;
+RegCloseKey      :: (hKey: HKEY) -> s32 #foreign Advapi32;
 
 #scope_file
-ntdll       :: #system_library "Ntdll";
-kernel32    :: #system_library "kernel32";
-winmm       :: #system_library "winmm";
-user32      :: #system_library "user32";
-shell32     :: #system_library "shell32";
-Crt         :: #system_library "msvcrt";
-gdi         :: #system_library "Gdi32";
-gl          :: #system_library "opengl32";
-Dwmapi      :: #system_library "Dwmapi";
-DbgHelp     :: #system_library "DbgHelp";
-Advapi32    :: #system_library "Advapi32";
-Shlwapi     :: #system_library "shlwapi";
-comdlg32    :: #system_library "comdlg32";
-UxTheme     :: #system_library "UxTheme";
+kernel32 :: #system_library "kernel32";
+user32   :: #system_library "user32";
+shell32  :: #system_library "shell32";
+gdi      :: #system_library "Gdi32";
+Dwmapi   :: #system_library "Dwmapi";
+Advapi32 :: #system_library "Advapi32";

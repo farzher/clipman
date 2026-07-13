@@ -22,11 +22,11 @@ CURLcode :: enum s32 {
 CURLoption :: enum s32 {
   WRITEDATA      :: 10001;
   URL            :: 10002;
-  WRITEFUNCTION  :: 20011;
-  TIMEOUT        :: 13;
   POSTFIELDS     :: 10015;
   HTTPHEADER     :: 10023;
   CUSTOMREQUEST  :: 10036;
+  WRITEFUNCTION  :: 20011;
+  TIMEOUT        :: 13;
   HEADER         :: 42;
   NOBODY         :: 44;
   FOLLOWLOCATION :: 52;

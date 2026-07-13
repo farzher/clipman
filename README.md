@@ -14,11 +14,11 @@ https://github.com/farzher/clipman/releases/download/v1.0.1/clipman.exe
 - database encryption
 - 0 dependencies, 1 exe, 2mb
 - < 1MB RAM usage while idle
-- streamer mode - everytime clipman's opened all information is censored
-- images highgly compressed using webp to keep the .db file small
+- streamer mode - each time ClipMan opens, all information is censored
+- images highly compressed using WebP to keep the .db file small
   - the original image is saved to the %temp% folder and will be used until it's gone
 - start typing to filter to clips containing that text
-- right click -> Context - goto the first time a clip was copied to see what else was copied around that same time
+- right click -> Context - go to the first time a clip was copied to see what else was copied around that time
 - hover over the right half of a clip to get a quick detailed view of it
   - text / files / images - expand to fill the window
   - text that is an imgur link or youtube link - renders as an image

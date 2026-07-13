@@ -3,14 +3,14 @@
 
 // import functions
 using,only(
-  Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste, send_registered_hotkey,
+  Mouse, compress, decompress, utc_to_time_ago, set_window_pos_to_mouse, send_paste,
   save_bitmap_to_file, set_file_time_to_utc, myregisterhotkey, add_to_startup, remove_from_startup, is_set_to_run_on_startup,
   trim_process_working_set
 ) Functions :: #import,file "functions.jai";
 
 //
 APP_NAME      :: "ClipMan";
-VERSION       :: "v1.0.1";
+VERSION       :: "v1.0.2";
 CONFIG_PATH   :: "clipman.ini";
 
 // default config
@@ -37,12 +37,9 @@ window_height : int; // defined by config_load
 max_records   : int; // defined by config_load
 
 
-ONLY_RENDER_WHEN_CHANGED :: true;
-#if ONLY_RENDER_WHEN_CHANGED {
-  render_dirty_info: struct {
-    new_event: bool;
-    hover_index: int; // mousemove is current not an event. so we have to track if the mouse position would actually change anything
-  }
+render_dirty_info: struct {
+  new_event: bool;
+  hover_index: int; // Mouse movement is current state, not an event.
 }
 
 
@@ -78,9 +75,7 @@ main :: () {
   // need this to receive clipboard copy events
   AddClipboardFormatListener(hwnd);
 
-  // Initialize the clipboard/database state now, but leave OpenGL unloaded until
-  // the window is actually opened. The graphics driver accounts for nearly all
-  // of ClipMan's otherwise-idle working set.
+  // Leave OpenGL unloaded until the window opens; its driver owns nearly all idle memory.
   init_data();
 
   // create tray icon
@@ -88,8 +83,7 @@ main :: () {
   // notify windows to remove our tray icon because it's too stupid to do this on its own
   defer trayicon_free();
 
-  // maybe show the window. Keep this after background initialization so hiding
-  // also trims the pages touched during startup.
+  // Keep this after background initialization so hiding also trims startup pages.
   show_window(xx config.on_startup_open);
 
   // main game loop
@@ -98,22 +92,19 @@ main :: () {
     update();
 
     if visible {
-      render();
+      render(); // called often, but only actually renders when state changes
       tfree();
     } else {
       clear_records(); // hidden windows do not need DB previews/image blobs
       tfree();
       trim_process_working_set();
-      WaitMessage();
+      WaitMessage(); // blocks until copy or open event
     }
 
   }
 
 }
 
-// todo: need a way to edit settings / hotkey / remember password
-// ^ this stuff now exists but isn't great. would be nice if i could
-// just type out the hotkey instead of having to spell it out in the config file
 // todo: ability to resize the window
 
 
@@ -178,7 +169,7 @@ init_db :: (key: string = "") {
 
   total_copy_count = db.select_int("select count(1) from copy");
 
-  if !is_db_locked && total_copy_count==0 {
+  if total_copy_count == 0 {
     insert_into_db(#run interp(#string STR
       %{APP_NAME} %{VERSION} by farzher
       Alt + ` (backtick/tilde ~) to toggle
@@ -197,17 +188,15 @@ update :: () {
   previous_scroll_offset := scroll_offset;
   previous_search_string := search_input.text;
 
-  update_records_handeled := false;
+  prevent_update := false;
 
   update_window_events();
 
-  #if ONLY_RENDER_WHEN_CHANGED if events_this_frame.count render_dirty_info.new_event = true;
+  if events_this_frame.count render_dirty_info.new_event = true;
 
   for * event : events_this_frame {
-    // mylog(event.*);
-
-    // exit when you close the window or hit F5
-    if event.type == .QUIT || event.key_code == .F5 then exit(0);
+    if event.type == .QUIT || event.key_code == .F5 then exit(0); // exit when you close the window or hit F5
+    if event.type == .KEYBOARD && event.key_code == .F4 && event.alt_pressed then exit(0); // have to manually handle Alt+F4 because jai ignores it
 
     // handle search input
     GetRect.current_time = getms();
@@ -234,9 +223,9 @@ update :: () {
 
 
           case .MOUSE_BUTTON_LEFT;  do_click();
-          case .MOUSE_BUTTON_RIGHT; do_rightclick();
+          case .MOUSE_BUTTON_RIGHT; do_rightclick(*prevent_update);
           case .DELETE;             do_delete();
-          case .TAB;                do_tab();
+          case .TAB;                is_streamer_mode = false;
 
           // in keydown so it doesn't trigger after delete confirmation
           case .ENTER;              if is_db_locked then decryptdb(); else do_submit_selected();
@@ -279,10 +268,9 @@ update :: () {
         GetRect.clear_text(*search_input);
 
 
-      case .HOTKEY; // when you hit the global hotkey, toggle the window
-        new_visible := !visible;
-        if new_visible set_window_pos_to_mouse(hwnd);
-        show_window(new_visible);
+      case .HOTKEY; // When the global hotkey is pressed, toggle the window.
+        if !visible set_window_pos_to_mouse(hwnd);
+        show_window(!visible);
 
 
       case .MOUSE_WHEEL; // mouse wheel scrolling
@@ -322,8 +310,8 @@ update :: () {
 
               case "Import from Ditto";
                 if is_db_locked break;
-                filepath := showinputbox("ditto.db filepath", "ditto.db filepath", ispassword=false);
-                if filepath then import_from_ditto_db(copy_temporary_string(fromcstr(filepath)));
+                filepath := showinputbox("ditto.db filepath", ispassword=false);
+                if filepath then import_from_ditto_db(copy_temporary_string(to_string(filepath)));
 
               case "Save All Images";
                 if MessageBoxW(null, utf8_to_wide("Save all images to Downloads?"), utf8_to_wide("Save All Images"), MB_OKCANCEL | MB_TOPMOST) != IDOK break;
@@ -369,13 +357,13 @@ update :: () {
               case "Encrypt";
                 if is_db_locked break; // db cannot be encrypted because it's currently locked
 
-                cpassword := showinputbox("Enter a password", "Enter a password");
+                cpassword := showinputbox("Enter a password");
                 if cpassword == null then break;
-                password := copy_temporary_string(fromcstr(cpassword));
+                password := copy_temporary_string(to_string(cpassword));
 
-                cconfirmpassword := showinputbox("Confirm password", "Confirm password");
+                cconfirmpassword := showinputbox("Confirm password");
                 if cconfirmpassword == null then break;
-                confirmpassword := copy_temporary_string(fromcstr(cconfirmpassword));
+                confirmpassword := copy_temporary_string(to_string(cconfirmpassword));
 
                 if confirmpassword != password then break;
 
@@ -388,7 +376,7 @@ update :: () {
   }
 
 
-  if update_records_handeled then return;
+  if prevent_update then return;
 
   if previous_search_string != search_input.text {
     selected_index = 0;
@@ -421,27 +409,27 @@ render :: () {
 
   requests_finished := TextureCache.upload_completed_requests();
 
-  #if ONLY_RENDER_WHEN_CHANGED {
+  // Keep rendering while the search text fades, plus one final frame to clear it.
+  search_fade_active := getms() - search_input.last_keypress_time < 1000;
 
-    // if nothing changed, just sleep, don't render anything. the pervious frame will still be shown.
-    nothing_changed := render_dirty_info.hover_index == hover_index && !render_dirty_info.new_event && !requests_finished;
-    if nothing_changed { sleep_milliseconds(1); return; }
+  // if nothing changed, just sleep, don't render anything. the pervious frame will still be shown.
+  nothing_changed := render_dirty_info.hover_index == hover_index && !render_dirty_info.new_event && !requests_finished && !search_fade_active;
+  if nothing_changed { sleep_milliseconds(1); return; }
 
-    render_dirty_info.new_event = false; // set new_event as false when we render
-    render_dirty_info.hover_index = hover_index;
-  }
+  // Leave one frame dirty while fading so the first frame after it expires clears the text.
+  render_dirty_info.new_event = search_fade_active;
+  render_dirty_info.hover_index = hover_index;
 
   update_window_transparency(can_be_transparent=hover_index == -1);
 
-  // render records
-  // draw_on_top: struct {x: float; y: float; w: float; h: float; t: *Simp.Texture; };
+  // Render records from bottom to top so expanded previews can cover later rows.
   i := records.count-1; while i >= 0 { defer i -= 1;
     record := records[i];
 
     render_record_background :: () #expand {
 
       background_color := COLORS.DARK;
-      if isselected(i) {
+      if is_selected(i) {
         background_color = COLORS.BLACK;
       } else if i%2==0 {
         background_color = COLORS.DARKER;
@@ -487,14 +475,6 @@ render :: () {
 
         render_record_image(record, x, y, xx window_width, xx height);
 
-        // if hover_index == i {
-        //   y = xx window_height;
-        //   ratio = min(cast(float)window_width/texture.width, cast(float, window_height)/texture.height);
-        //   width := texture.width * ratio;
-        //   height := texture.height * ratio;
-        //   draw_on_top = {x, y, x + width, y - height, texture};
-        // }
-
         return;
       }
 
@@ -529,29 +509,21 @@ render :: () {
             }
 
             text_width := Simp.prepare_text(my_font, maybe_censor(text));
-            the_color := color;
-            Simp.draw_prepared_text(my_font, xx text_x, xx text_y, the_color);
+            Simp.draw_prepared_text(my_font, xx text_x, xx text_y, color);
             text_x += text_width;
           }
         } else {
-          text_width := Simp.prepare_text(my_font, maybe_censor(line));
+          Simp.prepare_text(my_font, maybe_censor(line));
           text_x := 12;
           text_y := -12/2 + window_height - i*config.record_height - my_font.character_height*(line_count+1);
-          the_color := ifx selected_index == i then COLORS.RED else color;
-          Simp.draw_prepared_text(my_font, xx text_x, xx text_y, the_color);
+          line_color := ifx selected_index == i then COLORS.RED else color;
+          Simp.draw_prepared_text(my_font, xx text_x, xx text_y, line_color);
         }
 
       }
     }
     render_lines_of_text_or_img();
   }
-
-  // // to draw fullscreen images on top of everything else
-  // if draw_on_top.t {
-  //   using draw_on_top;
-  //   Simp.set_shader_for_images(t);
-  //   Simp.immediate_quad(x, y, w, h, COLORS.WHITE);
-  // }
 
   render_errors :: () #expand {
     if is_config_parse_error {
@@ -582,49 +554,22 @@ render :: () {
     text_x := window_width/2 - text_width/2;
     text_y := window_height - 100;
     color := COLORS.RED;
-    color.w = mapnumber(xx (ms - search_input.last_keypress_time), 1000, 0, 0, 1, exponent=0);
+    color.w = mapnumber(xx (ms - search_input.last_keypress_time), 1000, 0, 0, 1);
     Simp.draw_prepared_text(my_big_font, xx text_x, xx text_y, color);
-
-    // #if 1 { // render selection
-    //   if search_input.selection.active {
-    //     start := search_input.selection.end_character;
-    //     end := search_input.selection.start_character;
-    //     GetRect.draw_procs.prepare_text = Simp.prepare_text;
-
-    //     sx0, sx1 := GetRect.get_selection_endpoints(my_big_font, search_input.text, 0, xx text_x, start, end);
-
-    //     sy0 := cast(float) text_y;
-    //     sy1 := cast(float) text_y+my_big_font.character_height;
-
-    //     #import "Math";
-    //     p0 := Vector2.{sx0, sy0};
-    //     p1 := Vector2.{sx1, sy0};
-    //     p2 := Vector2.{sx1, sy1};
-    //     p3 := Vector2.{sx0, sy1};
-
-    //     Simp.set_shader_for_color(true);
-    //     Simp.immediate_quad(p0, p1, p2, p3, color);
-    //     // Simp.immediate_flush();
-    //   }
-    // }
   }
   render_search_string();
 
 
   render_scroll_bar :: () #expand {
-    if scroll_offset > 0 && total_copy_count>0 {
-      scroll_percent := cast(float)(scroll_offset + records.count) / total_copy_count;
-      if scroll_percent > 0 {
-        max_scroll_offset := total_copy_count-max_records;
-        scrollbar_width :: 10;
-        min_scrollbar_height :: 32;
-        scrollbar_height := mapnumber(xx max_scroll_offset, 0, 100, xx window_height, min_scrollbar_height);
-        scrollbar_y := mapnumber(xx scroll_offset, 0, xx max_scroll_offset, xx window_height, min_scrollbar_height);
+    if scroll_offset > 0 && total_copy_count > 0 {
+      max_scroll_offset := total_copy_count-max_records;
+      scrollbar_width :: 10;
+      min_scrollbar_height :: 32;
+      scrollbar_height := mapnumber(xx max_scroll_offset, 0, 100, xx window_height, min_scrollbar_height);
+      scrollbar_y := mapnumber(xx scroll_offset, 0, xx max_scroll_offset, xx window_height, min_scrollbar_height);
 
-        Simp.set_shader_for_color();
-        Simp.immediate_quad(cast(float) window_width-12, scrollbar_y, cast(float) window_width-12+scrollbar_width, scrollbar_y-scrollbar_height, COLORS.RED);
-
-      }
+      Simp.set_shader_for_color();
+      Simp.immediate_quad(cast(float) window_width-12, scrollbar_y, cast(float) window_width-12+scrollbar_width, scrollbar_y-scrollbar_height, COLORS.RED);
     }
   }
   render_scroll_bar();
@@ -633,25 +578,7 @@ render :: () {
   DwmFlush(); // simp opengl vsync burns 100% cpu without this
   Simp.update_window(hwnd);
   Simp.clear_render_target(COLORS.DARK.x, COLORS.DARK.y, COLORS.DARK.z, 0);
-  // Simp.clear_render_target(COLORS.BLACKISH.x, COLORS.BLACKISH.y, COLORS.BLACKISH.z, 1);
-  // Simp.clear_render_target(0,0,0,0);
-  // Simp.clear_render_target(1,0,1,0);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 clear_records :: () {
   for records free(it.preview);
@@ -661,18 +588,14 @@ clear_records :: () {
 update_records :: () {
   clear_records();
 
-  // reset order back to default if we scroll top the top or start searching
-  if order_by == "bytecount" {
-    if search_input.text.count then order_by = "last_seen_at";
-  } else {
-    if scroll_offset == 0 || search_input.text.count then order_by = "last_seen_at";
-  }
+  if search_input.text.count || (scroll_offset == 0 && order_by != "bytecount")
+    order_by = "last_seen_at";
 
-  the_select_from :: "select id, preview, last_seen_at, first_seen_at, count, type, bytecount from copy";
+  the_select_from :: "select id, preview, first_seen_at, type, bytecount from copy";
   rows: type_of(db.select(""));
 
   if String.starts_with(search_input.text, "id:") {
-    id_str := substr(search_input.text, "id:".count, -"id:".count);
+    id_str := String.slice(search_input.text, "id:".count, search_input.text.count - "id:".count);
     id := String.parse_int(*id_str);
     if id {
       rows = db.select(to_c_string(interp("${the_select_from} where id=? limit 1"),, temp), id);
@@ -680,7 +603,7 @@ update_records :: () {
 
   } else if search_input.text.count {
     words := String.split(search_input.text, " ");
-    if(words.count > 1) {
+    if words.count > 1 {
       where_arr: [..]string;
       where_arr.allocator = temp;
 
@@ -704,12 +627,10 @@ update_records :: () {
 
     record: DbRecord;
     record.id            = db.get_int(row, 0);
-    record.preview       = db.get_str(row, 1); // perf don't load entire images here until we need them?
-    record.last_seen_at  = db.get_int(row, 2);
-    record.first_seen_at = db.get_int(row, 3);
-    record.count         = db.get_int(row, 4);
-    record.type          = xx db.get_int(row, 5);
-    record.bytecount     = db.get_int(row, 6);
+    record.preview       = db.get_str(row, 1);
+    record.first_seen_at = db.get_int(row, 2);
+    record.type          = xx db.get_int(row, 3);
+    record.bytecount     = db.get_int(row, 4);
 
     records.count += 1;
     records[it_index] = record;
@@ -730,7 +651,7 @@ do_click :: () {
 
   do_submit_selected();
 }
-do_rightclick :: () #expand {
+do_rightclick :: (prevent_update: *bool) {
   if is_streamer_mode {is_streamer_mode = false; return; }
 
   mouse := Mouse.pos(hwnd);
@@ -755,8 +676,9 @@ do_rightclick :: () #expand {
       scroll_offset -= max_records/2;
       selected_index = max_records/2;
       GetRect.clear_text(*search_input);
-      update_records(); // to update records.count; so our selected_index works; i think this will cause us to query twice
-      `update_records_handeled = true;
+      update_records();
+      prevent_update.* = true;
+      return;
 
     case "Sort By Size";
       order_by = "bytecount";
@@ -768,8 +690,6 @@ do_rightclick :: () #expand {
         case .BITMAP; #through;
         case .WEBP;
           System :: #import "System";
-          // if you call this too quickly (within the same second) filenames will be the same and overwrite ...
-          // ^ fixed by using getutcms
           filepath := tprint("C:/Users/%/Downloads/clipman_%.png", System.get_username(), getutcms());
           success := save_bitmap_to_file(record_to_windows_bitmap(record), filepath);
           if success then set_file_time_to_utc(filepath, record.first_seen_at); // stamp with original copy time
@@ -779,7 +699,6 @@ do_rightclick :: () #expand {
       }
 
   }
-
 }
 
 do_delete :: () {
@@ -798,14 +717,8 @@ do_delete :: () {
 
 }
 
-do_tab :: () {
-  if is_streamer_mode {is_streamer_mode = false; return; }
-}
-
 do_submit_selected :: (force_selection := -1) {
-  if force_selection != -1 {
-    selected_index = force_selection;
-  }
+  if force_selection != -1 then selected_index = force_selection;
 
   if selected_index < 0 then return;
   if selected_index >= records.count then return;
@@ -814,7 +727,6 @@ do_submit_selected :: (force_selection := -1) {
 
   record := records[selected_index];
 
-  //
   if multiselecting() {
     push_tallocator();
     builder: String_Builder;
@@ -837,7 +749,7 @@ do_submit_selected :: (force_selection := -1) {
   }
 
 
-  // copy their selection into the clipobard then paste it
+  // Copy the selection to the clipboard, then paste it.
   if record.type == {
 
     case .TEXT;   if record.preview.count then os_clipboard_set_text(record.preview);
@@ -866,27 +778,23 @@ on_copy :: () {
   bmpinfobytes := os_clipboard_get_bitmap(hwnd);
   if bmpinfobytes.count {
     insert_into_db(bmpinfobytes, .BITMAP);
-    if visible update_records();
-    return;
-  }
+  } else {
+    files := os_clipboard_get_file(hwnd);
+    if files.count {
+      for f, i: files {
+        filename_start := String.find_index_from_right(f, #char "\\") + 1;
+        files[i] = tprint("% - %", Strings.substring(f, xx filename_start), f);
+      }
 
-  files := os_clipboard_get_file(hwnd);
-  if files.count {
-    for f, i: files {
-      files[i] = tprint("% - %", Strings.substring(f, mylastindex(f, #char "\\")+"\\".count), f);
+      insert_into_db(String.join(..files, separator="\n",, tallocator), .FILE);
+    } else {
+      clip_text := os_clipboard_get_text(); defer free(clip_text);
+      if !clip_text.count return;
+      insert_into_db(clip_text, .TEXT);
     }
-    str := String.join(..files, separator="\n",, tallocator);
-    insert_into_db(str, .FILE);
-    if visible update_records();
-    return;
   }
 
-  clip_text := os_clipboard_get_text(); defer free(clip_text);
-  if clip_text.count {
-    insert_into_db(clip_text, .TEXT);
-    if visible update_records();
-    return;
-  }
+  if visible update_records();
 }
 
 ensure_selection_in_range :: () {
@@ -911,29 +819,26 @@ ensure_selection_in_range :: () {
 // also every time we paste a clip we copy it first, which would cause duplicates
 // so we need to deduplicate clips
 insert_into_db :: (_str: string, _copy_type: COPY_TYPE = .TEXT) {
-  utc : int = xx getutc();
+  utc: int = xx getutc();
 
   str := _str; // to make it not immutable
   copy_type := _copy_type; // to make it not immutable
   if _copy_type == .BITMAP then str = compress(str);
 
-  // if_the_image_is_big_compress_it
   if _copy_type == .BITMAP {
-    // if str.count > 10000 {
-      webpbytes := windows_bitmap_to_webp(_str, quality=90);
-      if webpbytes.count < str.count {
-        str = webpbytes;
-        copy_type = .WEBP;
-      }
-    // }
+    webpbytes := windows_bitmap_to_webp(_str, quality=90);
+    if webpbytes.count < str.count {
+      str = webpbytes;
+      copy_type = .WEBP;
+    }
   }
 
   // if this record has already been inserted, just update it instead of inserting a copy
   existing_record_id: int;
+  hash: int;
   if _copy_type == .BITMAP {
-
     #import "Hash";
-    hash : int = sdbm_hash(str.data, str.count);
+    hash = sdbm_hash(str.data, str.count);
     existing_record_id = db.select_int("select id from copy where type=? and preview_hash=? and preview=? limit 1", cast(int)copy_type, hash, str);
   } else {
     existing_record_id = db.select_int("select id from copy where type=? and preview=? limit 1", cast(int)copy_type, str);
@@ -942,28 +847,15 @@ insert_into_db :: (_str: string, _copy_type: COPY_TYPE = .TEXT) {
   if existing_record_id {
     db.query("UPDATE copy SET last_seen_at=?, count=count+1 where id=?", utc, existing_record_id);
   } else {
-
-    hash : int = 0;
-    if _copy_type == .BITMAP {
-      hash = sdbm_hash(str.data, str.count);
-    }
-
-    success := db.query("INSERT INTO copy (preview, preview_hash, last_seen_at, first_seen_at, type, bytecount) VALUES (?, ?, ?, ?, ?, ?)", str, hash, utc, utc, cast(int)copy_type, str.count);
-    if !success then return;
+    if !db.query("INSERT INTO copy (preview, preview_hash, last_seen_at, first_seen_at, type, bytecount) VALUES (?, ?, ?, ?, ?, ?)", str, hash, utc, utc, cast(int)copy_type, str.count) then return;
     total_copy_count += 1;
   }
 
-  // write the uncompress image into the cache
+  // Cache the full-quality bitmap when WebP is stored in the database.
   if _copy_type == .BITMAP && copy_type == .WEBP {
     record_id := existing_record_id;
-    if !record_id {
-      record_id = db.select_int("select last_insert_rowid()");
-    }
-    if !record_id {
-    } else {
-      write_entire_file_to_clipman_cache_temp_folder(interp("${record_id}"), compress(_str));
-    }
-
+    if !record_id then record_id = db.select_int("select last_insert_rowid()");
+    if record_id then write_entire_file_to_clipman_cache_temp_folder(interp("${record_id}"), compress(_str));
   }
 
   selected_index = 0;
@@ -977,8 +869,7 @@ import_from_ditto_db :: (ditto_filepath: string) {
 
     if exists_id return false;
 
-    success := db.query("INSERT INTO copy (preview, last_seen_at, first_seen_at, type) VALUES (?, ?, ?, ?)", str, last_seen_at, first_seen_at, cast(int)copy_type);
-    if !success then {
+    if !db.query("INSERT INTO copy (preview, last_seen_at, first_seen_at, type) VALUES (?, ?, ?, ?)", str, last_seen_at, first_seen_at, cast(int)copy_type) {
       mylog("!success", first_seen_at);
       return false;
     }
@@ -1007,6 +898,7 @@ import_from_ditto_db :: (ditto_filepath: string) {
     mylog("failed to open ditto_filepath:", ditto_filepath);
     return;
   }
+  defer ditto.close();
 
   for ditto.select("select ooData, lDate, lastPasteDate from Main join Data ON Data.lParentID=Main.lID where strClipBoardFormat=?", "CF_UNICODETEXT") {
     push_tallocator();
@@ -1018,7 +910,6 @@ import_from_ditto_db :: (ditto_filepath: string) {
     first_seen_at := ditto.get_int(it, 1);
     last_seen_at  := ditto.get_int(it, 2);
 
-
     inserted := tmp_insert_into_db(ooData, first_seen_at, last_seen_at);
     if inserted mylog(ooData);
   }
@@ -1027,11 +918,6 @@ import_from_ditto_db :: (ditto_filepath: string) {
 }
 
 
-
-
-
-
-// depends on many globals
 config_load :: () {
   using,only(read_entire_file) #import "File";
 
@@ -1056,16 +942,9 @@ config_load :: () {
   if !ini_parse_string(file_data, *config) is_config_parse_error = true;
 }
 
-
-
-
-
-
-
-
 COPY_TYPE      :: enum u8 {TEXT :: 0; FILE :: 1; BITMAP :: 2; WEBP :: 3;}
 
-DbRecord       :: struct {id: int; preview: string; first_seen_at: int; last_seen_at: int; count: int; type: COPY_TYPE; bytecount: int; }
+DbRecord       :: struct {id: int; preview: string; first_seen_at: int; type: COPY_TYPE; bytecount: int; }
 
 MAX_LINE_LEN   :: 200; // only for rendering performance
 MAX_LINE_COUNT :: 60;  // only for rendering performance

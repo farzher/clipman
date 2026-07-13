@@ -3,7 +3,7 @@ using #import "Clipboard";
 #if OS == .WINDOWS {
 
     #import,file "mywindows.jai";
-    #import "Basic";  // For alloc.
+    #import "Basic";
 
     os_clipboard_get_file :: (hwnd: HWND) -> [..]string {
         files: [..] string;
@@ -15,14 +15,13 @@ using #import "Clipboard";
         defer CloseClipboard();
 
         hData := GetClipboardData(CF_HDROP);
-        GlobalLock(hData);
-        defer GlobalUnlock(hData);
-
         nfiles := DragQueryFileA(hData, 0xFFFFFFFF, null, 0);
         for i: 0..nfiles-1 {
-            str := talloc_string(1024*4/*idk*/);
-            DragQueryFileA(hData, i, str.data, xx str.count);
-            array_add(*files, to_string(str.data));
+            length := DragQueryFileA(hData, i, null, 0);
+            path := talloc_string(xx length + 1);
+            DragQueryFileA(hData, i, path.data, xx path.count);
+            path.count = length;
+            array_add(*files, path);
         }
 
         return files;
@@ -30,6 +29,7 @@ using #import "Clipboard";
 
     os_clipboard_set_file :: (hwnd: HWND, path: string) {
         if !OpenClipboard(hwnd) return;
+        defer CloseClipboard();
 
         EmptyClipboard();
 
@@ -43,8 +43,6 @@ using #import "Clipboard";
         df.fWide = .FALSE;
         memcpy(df+1, path.data, path.count);
         SetClipboardData(CF_HDROP, hGlobal);
-
-        CloseClipboard();
     }
 
     os_clipboard_get_bitmap :: (hwnd: HWND) -> string {
@@ -60,10 +58,6 @@ using #import "Clipboard";
         data := GlobalLock(cb_hnd);
         defer GlobalUnlock(cb_hnd);
 
-        raw_bytes: string;
-        raw_bytes.data = data;
-        raw_bytes.count = xx size;
-
         bytes := talloc_string(xx size);
         memcpy(bytes.data, data, bytes.count);
         return bytes;
@@ -71,6 +65,7 @@ using #import "Clipboard";
 
     os_clipboard_set_bitmap :: (hwnd: HWND, bytes: string) {
         if !OpenClipboard(hwnd) return;
+        defer CloseClipboard();
 
         EmptyClipboard();
 
@@ -81,8 +76,6 @@ using #import "Clipboard";
         memcpy(hMem, bytes.data, bytes.count);
 
         SetClipboardData(CF_DIB, hMem);
-
-        CloseClipboard();
     }
 }
 

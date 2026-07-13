@@ -37,23 +37,17 @@ close :: () -> bool {
 open_and_unlock :: (filename: string, password: string = "", remembered_password: string = "") -> bool {
   is_encrypted = false;
 
-  open(to_c_string(filename));
+  open(temp_c_string(filename));
   if query("select 1 from sqlite_master") return true;
 
   close();
-  open(to_c_string(filename));
+  open(temp_c_string(filename));
 
-  attempted_key := false;
-  if password != "" {
-    key(password);
-    attempted_key = true;
-  } else if remembered_password {
-    key(remembered_password);
-    attempted_key = true;
-  }
+  password_to_try := ifx password then password else remembered_password;
+  if password_to_try then key(password_to_try);
 
   unlocked := query("select 1 from sqlite_master");
-  if unlocked is_encrypted = attempted_key;
+  if unlocked is_encrypted = password_to_try != "";
   return unlocked;
 }
 
@@ -63,15 +57,15 @@ rekey :: (password: string) -> bool { return sqlite3_rekey(db, password.data, xx
 replace_db_file :: (filename: string, replacement_filename: string) -> bool {
   if !close() return false;
 
-  moved := MoveFileExA(to_c_string(replacement_filename), to_c_string(filename), MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED);
+  moved := MoveFileExA(temp_c_string(replacement_filename), temp_c_string(filename), MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED);
   if moved return true;
 
   move_error := GetLastError();
 
   // Fallback for cases where rename/replace fails but overwrite-copy is allowed.
-  copied := CopyFileA(to_c_string(replacement_filename), to_c_string(filename), 0);
+  copied := CopyFileA(temp_c_string(replacement_filename), temp_c_string(filename), 0);
   if copied {
-    DeleteFileA(to_c_string(replacement_filename));
+    DeleteFileA(temp_c_string(replacement_filename));
     return true;
   }
 
@@ -81,19 +75,19 @@ replace_db_file :: (filename: string, replacement_filename: string) -> bool {
 
 export_and_replace_db :: (filename: string, suffix: string, replacement_password: string) -> bool {
   tmp_filename := tprint("%%", filename, suffix);
-  DeleteFileA(to_c_string(tmp_filename));
+  DeleteFileA(temp_c_string(tmp_filename));
 
   success := query("ATTACH DATABASE ? AS replacement KEY ?", tmp_filename, replacement_password);
   success = success && query("SELECT sqlcipher_export('replacement')");
   success = query("DETACH DATABASE replacement") && success;
   if !success {
     mylog("failed to export replacement database");
-    DeleteFileA(to_c_string(tmp_filename));
+    DeleteFileA(temp_c_string(tmp_filename));
     return false;
   }
 
   replaced := replace_db_file(filename, tmp_filename);
-  open(to_c_string(filename));
+  open(temp_c_string(filename));
   return replaced;
 }
 
@@ -157,31 +151,26 @@ select_int :: (sql: *u8, binds: .. Any, default := 0) -> int {
 
 query :: (sql: *u8, binds: .. Any) -> bool {
   res := select(sql, ..binds);
+  defer free(res);
+
   errcode := sqlite3_step(res);
-  success := true;
-  if errcode != SQLITE_OK && errcode != SQLITE_ROW && errcode != SQLITE_DONE {
-    success = false;
-    mylog(to_string(sqlite3_errmsg(db)));
-    mylog(to_string(sql));
-  }
-  free(res);
-  return success;
+  if errcode == SQLITE_OK || errcode == SQLITE_ROW || errcode == SQLITE_DONE return true;
+
+  mylog(to_string(sqlite3_errmsg(db)));
+  mylog(to_string(sql));
+  return false;
 }
 
-
-
-set_str :: (res: *sqlite3_stmt, i: int, str: string) { sqlite3_bind_text(res, xx i, to_c_string(str,, tallocator), xx str.count, null); }
+set_str :: (res: *sqlite3_stmt, i: int, str: string) { sqlite3_bind_text(res, xx i, temp_c_string(str), xx str.count, null); }
 set_int :: (res: *sqlite3_stmt, i: int, v: int)      { sqlite3_bind_int64(res, xx i, v); }
 get_int :: (res: *sqlite3_stmt, coli: int) -> int    { return sqlite3_column_int64(res, xx coli); }
-get_txt :: (res: *sqlite3_stmt, coli: int) -> string { return alloc_string(to_string(sqlite3_column_text(res, xx coli))); }
+get_txt :: (res: *sqlite3_stmt, coli: int) -> string { return copy_string(to_string(sqlite3_column_text(res, xx coli))); }
 get_str :: (res: *sqlite3_stmt, coli: int) -> string {
   str := alloc_string(sqlite3_column_bytes(res, xx coli));
   memcpy(str.data, sqlite3_column_blob(res, xx coli), str.count);
   return str;
 }
-free :: (res: *sqlite3_stmt) {sqlite3_finalize(res); }
-
-
+free :: (res: *sqlite3_stmt) { sqlite3_finalize(res); }
 
 for_expansion :: (res: *sqlite3_stmt, body: Code, flags: For_Flags) #expand {
   `it_index := 0;
@@ -191,86 +180,3 @@ for_expansion :: (res: *sqlite3_stmt, body: Code, flags: For_Flags) #expand {
     #insert body;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-alloc_string :: (tmp: string) -> string {
-  str := alloc_string(tmp.count);
-  memcpy(str.data, tmp.data, tmp.count);
-  return str;
-}
-to_c_string :: (s: string) -> *u8 {
-  result : *u8 = alloc(s.count + 1);
-  memcpy(result, s.data, s.count);
-  result[s.count] = 0;
-  return result;
-}
-
-
-
-
-// // #import "Hash_Table";
-
-// exec :: (sql: string) -> err: bool {;
-//   err := !!sqlite3_exec(db, to_c_string(sql), callback, null, null);
-//   if err {
-//     mylog("exec error:", to_string(sqlite3_errmsg(db)));
-//     mylog(sql);
-//   }
-//   return err;
-// }
-// callback :: (notused: *void, argc: s32, argv: **u8, azcolname: **u8) -> s32 #c_call {
-//   ctx: Context;
-//   push_context ctx {
-//     print("hi from callback\n");
-//   }
-//   return 0;
-// }
-
-// // Row :: Table(string, string);
-// // exec :: (sql: string) -> results: [..] Row, err: bool {;
-// //   // push_tallocator();
-// //   rows: [..] Row;
-// //   remember_allocators(*rows);
-// //   // array_reserve(*rows, 10);
-
-// //   err := !!sqlite3_exec(db, to_c_string(sql), callback, *rows, null);
-// //   if err {
-// //     mylog("exec error:", to_string(sqlite3_errmsg(db)));
-// //     mylog(sql);
-// //   }
-
-// //   return rows, err;
-// // }
-// // callback :: (_rows: *void, argc: s32, argv: **u8, azcolname: **u8) -> s32 #c_call {
-// //   rows := cast(*[..]Row) _rows;
-// //   ctx: Context;
-// //   push_context ctx {
-
-// //     // push_tallocator();
-// //     row: *Row = array_add(rows);
-// //     // row.allocator = rows.allocator;
-// //     // row.allocator_data = rows.allocator_data;
-// //     init(row);
-
-// //     for i: 0 .. argc-1 {
-// //       colname := to_string(azcolname[i]);
-// //       value := ifx argv[i] then to_string(argv[i]) else "NULL";
-// //       table_add(row, colname, value);
-// //     }
-
-// //   }
-// //   return 0;
-// // }
-

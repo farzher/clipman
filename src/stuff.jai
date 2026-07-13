@@ -38,6 +38,7 @@ clipman_window_proc :: (window: HWND, message: u32, wparam: WPARAM, lparam: LPAR
 // Remote preview downloads live here only until the main thread uploads them
 // into TextureCache. Limiting the queue also bounds responses held while hidden.
 request_q: struct {
+  #import "Hash_Table";
   #import "Thread";
 
   MAX_PENDING :: 12;
@@ -62,7 +63,7 @@ request_q: struct {
     req.record_id = record_id;
     req.url = copy_string(url); // url may be in temporary storage
     table_add(*request_q.request_cache, record_id, req);
-    add_work(*request_q.thread_group, req, req.url);
+    add_work(*request_q.thread_group, req);
   }
 
   free :: (req: *Request) {
@@ -72,8 +73,8 @@ request_q: struct {
     free(cast(*void)req); // cast so we call Basic.free, not this procedure
   }
 
-  take_completed :: () -> [] *void {
-    return get_completed_work(*request_q.thread_group);
+  take_completed :: () -> [] *Request {
+    return cast,force([] *Request) get_completed_work(*request_q.thread_group);
   }
 
   ensure_init :: () {
@@ -92,56 +93,52 @@ request_q: struct {
   }
 }
 
-
-
 // TextureCache owns up to MAX_RECORDS GPU textures while the window is open.
 // Eviction deletes the GL handle, and show_window(false) empties the whole cache.
 TextureCache: struct {
   #import,file "modules/my_lru_cache.jai";
 
+  MAX_RECORDS :: 100; // a guess at the maximum amount of records that could ever be displayed. if we display more than this bad things could happen
   texture_cache: LRU(int, Simp.Texture, MAX_RECORDS, FREE_PROC=Simp.texture_destroy);
 
-  MAX_RECORDS :: 100; // a guess at the maximum amount of records that could ever be displayed. if we display more than this bad things could happen
-
   upload_completed_requests :: () -> bool {
-    if !request_q.inited || !request_q.request_cache.count return false;
-
     completed := request_q.take_completed();
-    for work: completed {
-      req := cast(*request_q.Request)work;
-      if req.response upload_response(req.record_id, req.response);
-      request_q.free(req);
+
+    for req: completed {
+      defer request_q.free(req);
+
+      if req.response {
+        auto_release_temp();
+        texture: Simp.Texture;
+        if Simp.texture_load_from_memory(*texture, xx req.response) {
+          add(*TextureCache.texture_cache, req.record_id, texture);
+        }
+      }
     }
+
     return completed.count > 0;
   }
 
-  upload_response :: (record_id: int, response: string) {
-    push_treset();
-
-    texture: Simp.Texture;
-    if Simp.texture_load_from_memory(*texture, xx response)
-      add(*TextureCache.texture_cache, record_id, texture);
-  }
-
   get_texture_for_record :: (record: DbRecord) -> *Simp.Texture {
-    can_fetch_img_from_record_text := can_fetch_img_from_text(record.preview);
 
     // guard against non-image records
-    if record.type != .BITMAP && record.type != .WEBP && !can_fetch_img_from_record_text then return null;
+    can_fetch_img_from_record_text := can_fetch_img_from_text(record.preview);
+    if !is_image(record) && !can_fetch_img_from_record_text then return null;
 
     // if the texture is already in the cache return it
-    textureptr := find_pointer(TextureCache.texture_cache, record.id);
-    if textureptr then return textureptr;
+    cached_texture := find_pointer(TextureCache.texture_cache, record.id);
+    if cached_texture then return cached_texture;
 
+    // text that can render as an image, go fetch the image
     if can_fetch_img_from_record_text {
       request_q.start(record.id, get_img_url_from_text(record.preview));
       return null;
     }
 
+    // upload image from db to gpu
     if is_image(record) {
-      // Image decoding uses several temporary full-size buffers. Release them
-      // after each upload instead of accumulating every image until frame end.
-      push_treset();
+      // Release full-size decode buffers after this upload.
+      auto_release_temp();
       bitmap := windows_bitmap_to_simp_bitmap(record_to_windows_bitmap(record));
       texture: Simp.Texture;
       Simp.texture_load_from_bitmap(*texture, *bitmap);
@@ -153,9 +150,9 @@ TextureCache: struct {
 }
 
 is_image :: (record: DbRecord) -> bool { return record.type == .BITMAP || record.type == .WEBP; }
-render_record_image :: (record: DbRecord, x: float, y: float, max_w: float, max_h: float) -> bool {
+render_record_image :: (record: DbRecord, x: float, y: float, max_w: float, max_h: float) {
   texture := TextureCache.get_texture_for_record(record);
-  if(!texture) return false;
+  if !texture return;
 
   ratio := min(max_w/texture.width, max_h/texture.height);
   w := texture.width * ratio;
@@ -163,7 +160,6 @@ render_record_image :: (record: DbRecord, x: float, y: float, max_w: float, max_
 
   Simp.set_shader_for_images(texture);
   Simp.immediate_quad(x, y-h, x + w, y, COLORS.WHITE);
-  return true;
 }
 
 
@@ -183,14 +179,9 @@ is_imgur_url :: (str: string) -> bool {
 
   starts_correctly := Strings.starts_with(str, "https://i.imgur.com/")
                    || Strings.starts_with(str, "http://i.imgur.com/");
-  if !starts_correctly return false;
-
-  ends_correctly := Strings.ends_with(str, ".png")
-                 || Strings.ends_with(str, ".jpg")
-                 || Strings.ends_with(str, ".jpeg");
-  if !ends_correctly return false;
-
-  return true;
+  return starts_correctly && (Strings.ends_with(str, ".png")
+                           || Strings.ends_with(str, ".jpg")
+                           || Strings.ends_with(str, ".jpeg"));
 }
 
 is_youtube_url :: (str: string) -> bool {
@@ -201,25 +192,19 @@ is_youtube_url :: (str: string) -> bool {
 
   if obviously_not_a_url(str) return false;
 
-  starts_correctly := Strings.starts_with(str, "https://youtube.com/watch?v=")
-                   || Strings.starts_with(str, "https://www.youtube.com/watch?v=")
-                   || Strings.starts_with(str, "https://youtu.be/")
-                   || Strings.starts_with(str, "https://www.youtu.be/")
-                   || Strings.starts_with(str, "https://youtube.com/shorts/")
-                   || Strings.starts_with(str, "https://www.youtube.com/shorts/")
-                   || Strings.starts_with(str, "https://youtube.com/live/")
-                   || Strings.starts_with(str, "https://www.youtube.com/live/");
-  if !starts_correctly return false;
-
-  return true;
+  return Strings.starts_with(str, "https://youtube.com/watch?v=")
+      || Strings.starts_with(str, "https://www.youtube.com/watch?v=")
+      || Strings.starts_with(str, "https://youtu.be/")
+      || Strings.starts_with(str, "https://www.youtu.be/")
+      || Strings.starts_with(str, "https://youtube.com/shorts/")
+      || Strings.starts_with(str, "https://www.youtube.com/shorts/")
+      || Strings.starts_with(str, "https://youtube.com/live/")
+      || Strings.starts_with(str, "https://www.youtube.com/live/");
 }
 
 is_twitch_url :: (str: string) -> bool {
   if obviously_not_a_url(str) return false;
-
-  if !Strings.contains(str, "twitch.tv/") return false;
-
-  return true;
+  return Strings.contains(str, "twitch.tv/");
 }
 twitch_username_from_url :: (str: string) -> string {
   username := ghetto_regex_capture(str, "twitch.tv/", is_alnum);
@@ -228,18 +213,15 @@ twitch_username_from_url :: (str: string) -> string {
 }
 
 obviously_not_a_url :: (str: string) -> bool {
-  if str.count > 10_000 return true;
-  if Strings.contains(str, "\n") return true;
-  return false;
+  return str.count > 10_000 || Strings.contains(str, "\n");
 }
 
-return_this_if :: (code: Code) #expand {value := #insert code; if value `return value; }
 youtube_videoid_from_url :: (str: string) -> string {
   if !is_youtube_url(str) return "";
-  return_this_if(ghetto_regex_capture(str, "youtube.com/watch?v=", is_alnum));
-  return_this_if(ghetto_regex_capture(str, "youtu.be/", is_alnum));
-  return_this_if(ghetto_regex_capture(str, "youtube.com/shorts/", is_alnum));
-  return_this_if(ghetto_regex_capture(str, "youtube.com/live/", is_alnum));
+  for prefix: string.["youtube.com/watch?v=", "youtu.be/", "youtube.com/shorts/", "youtube.com/live/"] {
+    video_id := ghetto_regex_capture(str, prefix, is_alnum);
+    if video_id return video_id;
+  }
   return "";
 }
 
@@ -257,20 +239,6 @@ ghetto_regex_capture :: (str: string, begin: string, is_matching_fn: (u8)->bool)
   return Strings.substring(str, index, end_index - index);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 censor :: (str: string) -> string {
   censored := talloc_string(str.count);
   memset(censored.data, #char"*", censored.count);
@@ -280,8 +248,6 @@ maybe_censor :: (str: string) -> string {
   return ifx is_streamer_mode || is_db_locked censor(str) else str;
 }
 
-
-
 my_font      : *Simp.Dynamic_Font;
 my_big_font  : *Simp.Dynamic_Font;
 my_tiny_font : *Simp.Dynamic_Font;
@@ -290,14 +256,13 @@ load_clipman_font :: (pixel_height: int) -> *Simp.Dynamic_Font {
   if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "verdanaz.ttf", pixel_height);
   if !font  font = Simp.get_font_at_size(".", "OpenSans-BoldItalic.ttf", pixel_height);
   if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "consolab.ttf", pixel_height);
-  // if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "consolaz.ttf", pixel_height);
   if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "segoeuiz.ttf", pixel_height);
   if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "segoeui.ttf", pixel_height);
   if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "arial.ttf", pixel_height);
   if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "tahoma.ttf", pixel_height);
   if !font  font = Simp.get_font_at_size("C:/Windows/Fonts", "verdana.ttf", pixel_height);
 
-  assert(font != null, "Unable to load a font. Tried Consolas Bold Italic/Segoe UI/Arial/Tahoma/Verdana from C:/Windows/Fonts, then external OpenSans-BoldItalic.ttf.");
+  assert(font != null, "Unable to load a font from C:/Windows/Fonts or OpenSans-BoldItalic.ttf.");
   return font;
 }
 init_font :: () {
@@ -318,27 +283,26 @@ show_window :: (_visible := true) {
   }
 
   visible = _visible;
-  if !visible lru_free(*TextureCache.texture_cache);
-
-  ShowWindow(hwnd, xx ifx visible then SW_SHOW else SW_HIDE);
-  if !visible && ui_inited then Simp.swap_buffers(hwnd); // ensure streamer mode doesn't render old information
-  if visible then SetForegroundWindow(hwnd); // ensure window has focus
-  if visible then is_streamer_mode = xx config.streamer_mode;
+  if visible {
+    ShowWindow(hwnd, SW_SHOW);
+    SetForegroundWindow(hwnd);
+    is_streamer_mode = xx config.streamer_mode;
+  } else {
+    lru_free(*TextureCache.texture_cache);
+    ShowWindow(hwnd, SW_HIDE);
+    if ui_inited then Simp.swap_buffers(hwnd); // Do not leave uncensored information buffered.
+  }
 }
 
-
-
-
-
-multiselecting :: inline () -> bool {return selected_index_end != -1;}
-multiselecting :: inline (v: bool, index:=-1) {
-  if(v) {
-    if !multiselecting() then selected_index_end = ifx index==-1 then selected_index else index;
+multiselecting :: inline () -> bool { return selected_index_end != -1; }
+multiselecting :: inline (v: bool, index := -1) {
+  if v {
+    if !multiselecting() then selected_index_end = ifx index == -1 then selected_index else index;
   } else {
     selected_index_end = -1;
   }
 }
-isselected :: inline (i: int) -> bool {
+is_selected :: inline (i: int) -> bool {
   imin, imax := selected_range();
   return i >= imin && i <= imax;
 }
@@ -348,8 +312,7 @@ selected_range :: () -> min: int, max: int {
 }
 selected_count :: () -> int {
   min, max := selected_range();
-  count := (max - min) + 1;
-  return count;
+  return max - min + 1;
 }
 
 selected_expansion: struct {};
@@ -361,23 +324,15 @@ for_expansion :: (_: *type_of(selected_expansion), body: Code, flags: For_Flags)
   }
 }
 
-
-
-
-
-colorref : COLORREF : 0x00000000;
 old_trans: u8;
-m: MARGINS = .{-1, -1, -1, -1};
 update_window_transparency :: (can_be_transparent: bool) {
-  new_trans: u8 = xx ifx can_be_transparent then ( (cast(float)config.transparency) /100)*255 else 1*255;
+  new_trans: u8 = xx ifx can_be_transparent then cast(float)config.transparency/100*255 else 255;
   if new_trans != old_trans {
     old_trans = new_trans;
 
-    SetLayeredWindowAttributes(hwnd, colorref, new_trans, LWA_ALPHA /*|LWA_COLORKEY*/);
+    SetLayeredWindowAttributes(hwnd, 0, new_trans, LWA_ALPHA);
   }
 }
-
-
 
 MAKEINTRESOURCEW :: (i: u32) -> *u16 { return cast(*u16)i; }
 WMAPP_NOTIFYCALLBACK :: WM_APP + 1;
@@ -399,24 +354,19 @@ trayicon_create :: (tooltip: string) {
 }
 trayicon_free :: () {
   nid: NOTIFYICONDATA;
-  // nid.cbSize = size_of(NOTIFYICONDATA);
   nid.hWnd   = hwnd;
   nid.uID    = 1;
   Shell_NotifyIconA(NIM_DELETE, *nid);
 }
 
-
-
-
-
 popup_menu :: (items: []string) -> string {
   hpop := CreatePopupMenu();
+  CHECKED_PREFIX :: "[✓] ";
   for item, item_i: items {
     // if the item name starts with "[✓] " we will remove that from the name and add a real checkmark to the label
-    // ✓ is 3 bytes instead of 1, so the substr lengths are +2
-    is_checked := substr(item, 0, 4+2) == "[✓] ";
+    is_checked := Strings.starts_with(item, CHECKED_PREFIX);
     is_checked_flag : u32 = xx ifx is_checked then MF_CHECKED else 0;
-    label := ifx is_checked then substr(item, 4+2) else item;
+    label := ifx is_checked then String.slice(item, CHECKED_PREFIX.count, item.count - CHECKED_PREFIX.count) else item;
 
     InsertMenuW(hpop, 0, MF_BYPOSITION | MF_STRING | is_checked_flag, xx (item_i+1), utf8_to_wide(label,, allocator=temp));
   }
@@ -427,28 +377,22 @@ popup_menu :: (items: []string) -> string {
   return items[selection-1];
 }
 
-
-
 inputbox_result_buffer: [4096]u8;
-inputbox_done     := false;
 inputbox_accepted := false;
 inputbox_hwnd     : HWND;
 inputbox_edit     : HWND;
 
-INPUTBOX_EDIT_ID   :: 1001;
 INPUTBOX_OK_ID     :: 1;
 INPUTBOX_CANCEL_ID :: 2;
 
 inputbox_accept :: () {
   GetWindowTextA(inputbox_edit, *inputbox_result_buffer[0], xx inputbox_result_buffer.count);
   inputbox_accepted = true;
-  inputbox_done = true;
   DestroyWindow(inputbox_hwnd);
 }
 
 inputbox_cancel :: () {
   inputbox_accepted = false;
-  inputbox_done = true;
   DestroyWindow(inputbox_hwnd);
 }
 
@@ -477,7 +421,7 @@ inputbox_wndproc :: (wnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> s64
 
 // Minimal native input popup.
 // Returns null on cancel; otherwise returns a pointer to inputbox_result_buffer.
-showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
+showinputbox :: (title: string, ispassword := true) -> *u8 {
   WS_EX_DLGMODALFRAME : u32 : 0x00000001;
   WS_EX_TOPMOST       : u32 : 0x00000008;
   WS_POPUP            : u32 : 0x80000000;
@@ -503,7 +447,6 @@ showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
   DEFAULT_QUALITY     :: 0;
   DEFAULT_PITCH       :: 0;
 
-  inputbox_done = false;
   inputbox_accepted = false;
   memset(*inputbox_result_buffer[0], 0, inputbox_result_buffer.count);
 
@@ -517,17 +460,15 @@ showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
   wc.lpszClassName = utf8_to_wide("clipman_inputbox_window");
   RegisterClassExW(*wc);
 
-  title_text := fromcstr(title);
-
   w: s32 = 360;
   h: s32 = 127;
   x := (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
   y := (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
 
-  inputbox_hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME | WS_EX_TOPMOST, wc.lpszClassName, utf8_to_wide(title_text), WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y, w, h, hwnd, null, hinstance, null);
+  inputbox_hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME | WS_EX_TOPMOST, wc.lpszClassName, utf8_to_wide(title), WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y, w, h, hwnd, null, hinstance, null);
   if inputbox_hwnd == null return null;
 
-  inputbox_edit = CreateWindowExW(0, utf8_to_wide("EDIT"), utf8_to_wide(""), WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | (ifx ispassword then ES_PASSWORD else cast(u32)0), 12, 16, 320, 22, inputbox_hwnd, cast(HMENU)INPUTBOX_EDIT_ID, hinstance, null);
+  inputbox_edit = CreateWindowExW(0, utf8_to_wide("EDIT"), utf8_to_wide(""), WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL | (ifx ispassword then ES_PASSWORD else cast(u32)0), 12, 16, 320, 22, inputbox_hwnd, cast(HMENU)1001, hinstance, null);
   ok := CreateWindowExW(0, utf8_to_wide("BUTTON"), utf8_to_wide("OK"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 176, 52, 75, 24, inputbox_hwnd, cast(HMENU)INPUTBOX_OK_ID, hinstance, null);
   cancel := CreateWindowExW(0, utf8_to_wide("BUTTON"), utf8_to_wide("Cancel"), WS_CHILD | WS_VISIBLE | WS_TABSTOP, 257, 52, 75, 24, inputbox_hwnd, cast(HMENU)INPUTBOX_CANCEL_ID, hinstance, null);
 
@@ -541,7 +482,7 @@ showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
   SetFocus(inputbox_edit);
 
   msg: MSG;
-  while !inputbox_done && GetMessageW(*msg, null, 0, 0) {
+  while IsWindow(inputbox_hwnd) && GetMessageW(*msg, null, 0, 0) {
     if msg.message == WM_KEYDOWN {
       if msg.wParam == VK_RETURN {
         inputbox_accept();
@@ -563,28 +504,7 @@ showinputbox :: (title: *u8, message: *u8, ispassword := true) -> *u8 {
   return *inputbox_result_buffer[0];
 }
 
-
-
-// last_index wasn't working for some reason...
-mylastindex :: (str: string, char: u8) -> int {
-  i := str.count-1;
-  while i >= 0 {
-    if str[i] == char return i;
-    i -= 1;
-  }
-  return -1;
-}
-
-
-
-
-
-
-
-
-
-// cf_dib is the raw contents of GetClipboardData(CF_DIB)
-// try to parse this thing into a simp bitmap
+// Convert raw CF_DIB clipboard bytes to a Simp bitmap.
 windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
   if cf_dib.count < size_of(BITMAPINFOHEADER) return .{};
 
@@ -638,48 +558,28 @@ windows_bitmap_to_simp_bitmap :: (cf_dib: string) -> Simp.Bitmap {
 
 #import,dir "modules/libwebp";
 
-windows_bitmap_to_webp :: (bitmapinfobytes: string, quality : float = 90) -> webpbytes: string, width: s32, height: s32 {
+windows_bitmap_to_webp :: (bitmapinfobytes: string, quality: float = 90) -> string {
   bitmap := windows_bitmap_to_simp_bitmap(bitmapinfobytes);
-  webpbytesptr: *u8;
-  webpbytecount: int;
-  if bitmap.format == .RGB8 {
-    webpbytecount = WebPEncodeRGB (bitmap.data.data, bitmap.width, bitmap.height, bitmap.stride, quality, *webpbytesptr);
-  } else {
-    webpbytecount = WebPEncodeRGBA(bitmap.data.data, bitmap.width, bitmap.height, bitmap.stride, quality, *webpbytesptr);
-  }
-  defer WebPFree(webpbytesptr);
-  webpbytesstr: string;
-  webpbytesstr.data = webpbytesptr;
-  webpbytesstr.count = webpbytecount;
-  return copy_string(webpbytesstr,, temp), bitmap.width, bitmap.height;
+  webp_data: *u8;
+  webp_size := WebPEncodeRGBA(bitmap.data.data, bitmap.width, bitmap.height, bitmap.stride, quality, *webp_data);
+  defer WebPFree(webp_data);
+
+  webp: string;
+  webp.data = webp_data;
+  webp.count = webp_size;
+  return copy_string(webp,, temp);
 }
 
-webp_to_pixels :: (webpbytes: string) -> pixels: string, width: s32, height: s32 {
+webp_to_windows_bitmap :: (webp: string) -> string {
   width: s32;
   height: s32;
-  pixeldata := WebPDecodeRGBA(webpbytes.data, xx webpbytes.count, *width, *height);
-  defer WebPFree(pixeldata);
+  pixels_data := WebPDecodeRGBA(webp.data, xx webp.count, *width, *height);
+  defer WebPFree(pixels_data);
+
   pixels: string;
-  pixels.data = pixeldata;
+  pixels.data = pixels_data;
   pixels.count = width*height*4;
-  return copy_string(pixels,, temp), width, height;
-}
-
-webp_to_simp_bitmap :: (webpbytes: string) -> Simp.Bitmap {
-  pixels, width, height := webp_to_pixels(webpbytes);
-  return windows_bitmap_to_simp_bitmap(pixels_to_windows_bitmap(pixels, width, height));
-}
-
-webp_to_windows_bitmap :: (webpbytes: string) -> string {
-  pixels, width, height := webp_to_pixels(webpbytes);
   return pixels_to_windows_bitmap(pixels, width, height);
-}
-
-webp_to_webp :: (webpbytes: string, quality : float = 70) -> string {
-  pixels, width, height := webp_to_pixels(webpbytes);
-  // note: probably some unecessary work in here
-  bitmap := pixels_to_windows_bitmap(pixels, width, height);
-  return windows_bitmap_to_webp(bitmap, quality=quality);
 }
 
 pixels_to_windows_bitmap :: (pixels: string, width: s32, height: s32) -> string {
@@ -721,38 +621,28 @@ record_to_windows_bitmap :: (record: DbRecord) -> string {
   if cached_bitmap.count return decompress(cached_bitmap);
   if record.type == .WEBP return webp_to_windows_bitmap(record.preview);
 
-  return ""; // all return paths
+  return "";
 }
 
-to_stringbytes :: (thing: *$T) -> string {
-  str: string;
-  str.data  = xx thing;
-  str.count = size_of(T);
-  return str;
-}
-
-
-read_entire_file_from_clipman_cache_temp_folder :: (name: string) -> bytes: string {
-  temp := getenv("temp");
-  if !temp {
+clipman_cache_file_path :: (name: string) -> string {
+  temp_dir := getenv("temp");
+  if !temp_dir {
     mylog("couldn't find %temp% folder, full quality image cache won't exist");
     return "";
   }
 
-  temp_folder_path := to_string(temp);
-  clipman_cache_path := interp("${temp_folder_path}/clipman");
-  make_directory_if_it_does_not_exist(clipman_cache_path);
-  return read_entire_file(interp("${clipman_cache_path}/${name}"));
+  cache_dir := interp("${to_string(temp_dir)}/clipman");
+  make_directory_if_it_does_not_exist(cache_dir);
+  return interp("${cache_dir}/${name}");
 }
-write_entire_file_to_clipman_cache_temp_folder :: (name: string, data: string) {
-  temp := getenv("temp");
-  if !temp {
-    mylog("couldn't find %temp% folder, full quality image cache won't exist");
-    return;
-  }
 
-  temp_folder_path := to_string(temp);
-  clipman_cache_path := interp("${temp_folder_path}/clipman");
-  make_directory_if_it_does_not_exist(clipman_cache_path);
-  write_entire_file(interp("${clipman_cache_path}/${name}"), data);
+read_entire_file_from_clipman_cache_temp_folder :: (name: string) -> string {
+  path := clipman_cache_file_path(name);
+  if !path return "";
+  return read_entire_file(path);
+}
+
+write_entire_file_to_clipman_cache_temp_folder :: (name: string, data: string) {
+  path := clipman_cache_file_path(name);
+  if path then write_entire_file(path, data);
 }
