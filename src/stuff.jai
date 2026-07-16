@@ -29,6 +29,7 @@ clipman_window_proc :: (window: HWND, message: u32, wparam: WPARAM, lparam: LPAR
       case WM_HOTKEY;            queue_clipman_event(.HOTKEY);    return 0;
       case WMAPP_NOTIFYCALLBACK; queue_clipman_event(.MY_TRAY, xx lparam); return 0;
       case WM_KILLFOCUS;         queue_clipman_event(.FOCUS_LOST);
+      case WM_PAINT;             render_dirty_info.new_event = true;
     }
     return MyWindowProc(window, message, wparam, lparam);
   }
@@ -276,21 +277,46 @@ init_font :: () {
 }
 
 
-show_window :: (_visible := true) {
-  if _visible && !visible {
+scrub_window_buffers :: () {
+  Simp.set_render_target(hwnd);
+  Simp.clear_render_target(COLORS.DARK.x, COLORS.DARK.y, COLORS.DARK.z, 0);
+  Simp.swap_buffers(hwnd);
+  Simp.clear_render_target(COLORS.DARK.x, COLORS.DARK.y, COLORS.DARK.z, 0);
+}
+
+show_window :: (show := true) {
+  if show {
+
+    if visible { // already visible, just focus
+      SetForegroundWindow(hwnd);
+      return;
+    }
+    visible = true;
+
     init_ui();
+    is_streamer_mode = xx config.streamer_mode;
     update_records();
+
+    // Render at zero alpha so DWM never presents the previous frame.
+    SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+    ShowWindow(hwnd, SW_SHOW);
+    DwmFlush();
+    render_dirty_info.new_event = true;
+    render();
+    SetLayeredWindowAttributes(hwnd, 0, window_alpha, LWA_ALPHA);
+
+    SetForegroundWindow(hwnd);
   }
 
-  visible = _visible;
-  if visible {
-    ShowWindow(hwnd, SW_SHOW);
-    SetForegroundWindow(hwnd);
-    is_streamer_mode = xx config.streamer_mode;
-  } else {
-    lru_free(*TextureCache.texture_cache);
+  if !show {
+
+    if !visible return;
+    visible = false;
+
+    SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
     ShowWindow(hwnd, SW_HIDE);
-    if ui_inited then Simp.swap_buffers(hwnd); // Do not leave uncensored information buffered.
+    scrub_window_buffers();
+    lru_free(*TextureCache.texture_cache);
   }
 }
 
@@ -324,13 +350,13 @@ for_expansion :: (_: *type_of(selected_expansion), body: Code, flags: For_Flags)
   }
 }
 
-old_trans: u8;
+window_alpha: u8;
 update_window_transparency :: (can_be_transparent: bool) {
-  new_trans: u8 = xx ifx can_be_transparent then cast(float)config.transparency/100*255 else 255;
-  if new_trans != old_trans {
-    old_trans = new_trans;
-
-    SetLayeredWindowAttributes(hwnd, 0, new_trans, LWA_ALPHA);
+  new_alpha: u8 = xx ifx can_be_transparent then cast(float)config.transparency/100*255 else 255;
+  if new_alpha != window_alpha {
+    window_alpha = new_alpha;
+    // Stay at zero alpha during show_window's privacy-gated first render.
+    if visible then SetLayeredWindowAttributes(hwnd, 0, new_alpha, LWA_ALPHA);
   }
 }
 

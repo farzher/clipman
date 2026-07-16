@@ -61,7 +61,9 @@ main :: () {
       window_y             = -32000,
       background_color_rgb = COLORS.to_3f(COLORS.DARK)
     );
-    if !config.on_startup_open then ShowWindow(hwnd, SW_HIDE);
+    // Window_Creation shows windows unconditionally. Keep it hidden until
+    // show_window has prepared a complete, privacy-safe first frame.
+    ShowWindow(hwnd, SW_HIDE);
     SetWindowLongW(hwnd, GWL_STYLE, xx WS_POPUP);
     SetWindowLongW(hwnd, GWL_EXSTYLE, WS_EX_LAYERED | WS_EX_TOOLWINDOW);
     SetWindowPos(hwnd, null, 0, 0, xx window_width, xx window_height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -420,6 +422,9 @@ render :: () {
   render_dirty_info.new_event = search_fade_active;
   render_dirty_info.hover_index = hover_index;
 
+  // Never rely on the previous back buffer being clear. In particular, swapping
+  // while hidden can move an old, sensitive front buffer back here.
+  Simp.clear_render_target(COLORS.DARK.x, COLORS.DARK.y, COLORS.DARK.z, 0);
   update_window_transparency(can_be_transparent=hover_index == -1);
 
   // Render records from bottom to top so expanded previews can cover later rows.
@@ -577,6 +582,9 @@ render :: () {
   Simp.swap_buffers(hwnd);
   DwmFlush(); // simp opengl vsync burns 100% cpu without this
   Simp.update_window(hwnd);
+
+  // Keep the back buffer safe too. show_window(false) will present this blank
+  // buffer and then clear the other buffer before the window can be reopened.
   Simp.clear_render_target(COLORS.DARK.x, COLORS.DARK.y, COLORS.DARK.z, 0);
 }
 
