@@ -210,10 +210,17 @@ string_interpolation  :: ($_str: string, allocator: Allocator = temp, caller_sco
   }
 }
 
-set_cwd_to_exe_location :: () {
+get_application_launch_path :: () -> string {
+  launcher_path := getenv("LITE_LAUNCHER_PATH");
+  if launcher_path return to_string(launcher_path);
+
   system :: #import "System";
+  return system.get_path_of_running_executable();
+}
+
+set_cwd_to_exe_location :: () {
   String :: #import "String";
-  set_working_directory(String.path_strip_filename(system.get_path_of_running_executable()));
+  set_working_directory(String.path_strip_filename(get_application_launch_path()));
 }
 
 #import,dir "curl";

@@ -297,8 +297,7 @@ update :: () {
             if selection == {
 
               case "Run on Startup";
-                System :: #import "System";
-                add_to_startup(APP_NAME, System.get_path_of_running_executable());
+                add_to_startup(APP_NAME, get_application_launch_path());
 
               case "[✓] Run on Startup";
                 remove_from_startup(APP_NAME);
