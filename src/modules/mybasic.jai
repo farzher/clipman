@@ -211,7 +211,7 @@ string_interpolation  :: ($_str: string, allocator: Allocator = temp, caller_sco
 }
 
 get_application_launch_path :: () -> string {
-  launcher_path := getenv("LITE_LAUNCHER_PATH");
+  launcher_path := getenv("ONEKB_PATH");
   if launcher_path return to_string(launcher_path);
 
   system :: #import "System";
