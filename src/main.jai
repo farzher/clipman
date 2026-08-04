@@ -10,7 +10,7 @@ using,only(
 
 //
 APP_NAME      :: "ClipMan";
-VERSION       :: "v1.0.3";
+VERSION       :: "v1.0.4";
 CONFIG_PATH   :: "clipman.ini";
 
 // default config
